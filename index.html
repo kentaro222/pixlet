@@ -57,7 +57,7 @@ header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .row>*{flex:1}
 .sheet button{padding:10px}
-.canvasScaleButton:disabled{opacity:.45}
+.canvasScaleButton:disabled,.canvasShrinkButton:disabled,.selbar button:disabled,#exportPng:disabled{opacity:.45}
 .paletteEntry{padding:10px 0;border-top:1px solid #343b48}
 .paletteEntryName{font-weight:700;overflow-wrap:anywhere}
 .paletteSamples{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:8px 0}
@@ -79,6 +79,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 .selbar{display:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .selbar.show{display:grid;align-content:center;height:100%}
 .selbar button{min-width:0}
+#exitSelection{grid-column:1/-1}
 .menuLabel{margin:12px 0 5px}
 .menuDisplay button{min-height:38px;padding:6px;font-size:13px}
 #toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:#000d;color:#fff;padding:8px 12px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:50}
@@ -118,6 +119,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
   <button id="pasteSel">貼付</button>
   <button id="trimSel">切抜</button>
   <button id="clearSel">解除</button>
+  <button id="exitSelection">選択ツールを終了</button>
 </div>
 
 <div id="normalControls">
@@ -177,6 +179,9 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
     <button id="paletteManageBtn">パレット管理</button>
     <button id="canvasEditBtn">キャンバス編集</button>
   </div>
+  <div class="row" style="margin-top:8px">
+    <button id="outlineBtn">縁取り</button>
+  </div>
   <p class="small menuLabel">表示</p>
   <div class="row menuDisplay">
     <button id="gridBtn">グリッド線: ON</button>
@@ -227,6 +232,14 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
     <button class="canvasScaleButton" data-scale="4">4×</button>
   </div>
   <p id="canvasScaleInfo" class="small"></p>
+  <h4>作品を整数分の1に縮小</h4>
+  <p class="small">各ブロックの左上の色を採用します。幅・高さが割り切れる場合のみ実行できます。</p>
+  <div class="row">
+    <button class="canvasShrinkButton" data-divisor="2">1/2</button>
+    <button class="canvasShrinkButton" data-divisor="3">1/3</button>
+    <button class="canvasShrinkButton" data-divisor="4">1/4</button>
+  </div>
+  <p id="canvasShrinkInfo" class="small"></p>
   <button class="closeSheet" style="width:100%;margin-top:8px">閉じる</button>
 </div>
 
@@ -350,10 +363,17 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
     <select id="exportScale" class="fieldControl">
       <option value="1">1×</option>
       <option value="2">2×</option>
+      <option value="3">3×</option>
       <option value="4">4×</option>
       <option value="8">8×</option>
       <option value="16">16×</option>
+      <option value="custom">カスタム</option>
     </select>
+  </div>
+  <div id="exportCustomWrap" style="margin-top:10px" hidden>
+    <label class="small" for="exportCustomScale">カスタム倍率（整数）</label>
+    <input id="exportCustomScale" class="fieldControl" type="number" min="1" max="64" step="1" value="1">
+    <p class="small">最大64×、幅・高さ8192px、総画素数16,777,216pxまで。</p>
   </div>
   <p id="exportSize" style="margin:12px 0">出力サイズ: 16 × 16 px</p>
   <p class="small">スプライトシートは選択したフレームを横一列に並べます。</p>
@@ -400,7 +420,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v2.9";
+const PIXLET_VERSION = "v3.2";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -547,6 +567,12 @@ function updateCanvasEditControls(){
   });
   $("#canvasScaleInfo").textContent=unavailable.length
     ? `上限64px。${unavailable.join("・")}はサイズ超過のため実行できません。` : "上限64px以内で拡大できます。";
+  $$(".canvasShrinkButton").forEach(button=>{
+    const divisor=Number(button.dataset.divisor);
+    button.disabled=!canShrinkArtwork(divisor);
+    button.title=button.disabled?"幅・高さの両方が割り切れ、縮小後が1px以上である必要があります":"";
+  });
+  $("#canvasShrinkInfo").textContent="縮小後のキャンバスサイズは1px以上。パレット・フレーム・レイヤー構造は維持します。";
 }
 function transformCanvas(width,height,plot){
   const oldWidth=state.width,oldHeight=state.height;
@@ -595,6 +621,17 @@ function scaleArtwork(scale){
     for(let dy=0;dy<scale;dy++)for(let dx=0;dx<scale;dx++){
       target[(y*scale+dy)*newWidth+x*scale+dx]=color;
     }
+  });
+}
+function canShrinkArtwork(divisor){
+  return [2,3,4].includes(divisor) && state.width%divisor===0 && state.height%divisor===0 &&
+    state.width/divisor>=1 && state.height/divisor>=1;
+}
+function shrinkArtwork(divisor){
+  if(!canShrinkArtwork(divisor))return toast("幅・高さが割り切れ、縮小後が1px以上になる倍率を選んでください");
+  transformCanvas(state.width/divisor,state.height/divisor,(x,y,color,target,newWidth)=>{
+    // Use the same corner in every block, so integer enlargement can be reversed exactly.
+    if(x%divisor===0 && y%divisor===0)target[(y/divisor)*newWidth+x/divisor]=color;
   });
 }
 
@@ -920,6 +957,32 @@ function flood(x,y,newC){
     }
   }
 }
+function outlineActiveLayer(){
+  if(state.activeColor===0)return toast("透明色では縁取りできません");
+  const layer=state.frames[state.activeFrame].layers[state.activeLayer];
+  const source=Uint8Array.from(layer);
+  const outlined=Uint8Array.from(source);
+  let changed=false;
+  for(let y=0;y<state.height;y++)for(let x=0;x<state.width;x++){
+    if(!source[idx(x,y)])continue;
+    // Read only the starting pixels: this pass must never grow from its own outline.
+    for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){
+      if(nx>=0 && ny>=0 && nx<state.width && ny<state.height && !source[idx(nx,ny)]){
+        outlined[idx(nx,ny)]=state.activeColor;
+        changed=true;
+      }
+    }
+  }
+  if(!changed)return toast("縁取りを追加できる透明ピクセルがありません");
+  stopPlayback();
+  pushUndo();
+  // A cached selection buffer must not later redraw the pre-outline layer content.
+  resetTransientEditState();
+  pointers.clear();pinchStart=null;
+  layer.set(outlined);
+  saveLocal();
+  syncUI();
+}
 function beginAction(cell){
   if(!cell)return;
   if(tool==="pen"){pushUndo();drawing=true;setPixel(cell.x,cell.y,state.activeColor);lastCell=cell;}
@@ -933,7 +996,8 @@ function beginAction(cell){
         selectionDrag={
           pointerX:cell.x,pointerY:cell.y,
           startX:selection.x,startY:selection.y,
-          layer:Uint8Array.from(state.frames[state.activeFrame].layers[state.activeLayer]),
+          // Pasted copies float over their original background, including on later drags.
+          layer:Uint8Array.from(selection.background || state.frames[state.activeFrame].layers[state.activeLayer]),
           historyRecorded:false
         };
         drawing=true;
@@ -972,7 +1036,7 @@ function moveAction(cell){
         layer.set(selectionDrag.layer);
         selection.x=selectionDrag.startX;
         selection.y=selectionDrag.startY;
-        clearSelectionFootprint();
+        if(!selection.background)clearSelectionFootprint();
         selection.x=selectionDrag.startX+dx;
         selection.y=selectionDrag.startY+dy;
         drawSelectionBuffer();
@@ -1014,6 +1078,11 @@ function clearSelectionFootprint(){
   if(!selection)return;
   const {x,y,w,h}=selection;
   const layer=state.frames[state.activeFrame].layers[state.activeLayer];
+  if(selection.background){
+    // Removing a floating copy reveals its background rather than erasing its rectangle.
+    layer.set(selection.background);
+    return;
+  }
   for(let yy=0;yy<h;yy++){
     for(let xx=0;xx<w;xx++){
       const sx=x+xx, sy=y+yy;
@@ -1032,7 +1101,9 @@ function drawSelectionBuffer(){
     for(let xx=0;xx<w;xx++){
       const tx=x+xx, ty=y+yy;
       if(tx>=0&&ty>=0&&tx<state.width&&ty<state.height){
-        layer[idx(tx,ty)]=buffer[yy*w+xx];
+        const color=buffer[yy*w+xx];
+        // Only pasted selections use transparent compositing; normal moves keep their cutout semantics.
+        if(color || !selection.background)layer[idx(tx,ty)]=color;
       }
     }
   }
@@ -1454,7 +1525,9 @@ function syncCenterLineButton(){
   $("#centerLineBtn").textContent=`中心線: ${centerLineVisible?"ON":"OFF"}`;
 }
 function syncSelectionControls(){
-  const bar=$("#selbar"),visible=!!selection;
+  const bar=$("#selbar"),visible=tool==="select";
+  ["flipSel","copySel","cutSel","trimSel","clearSel"].forEach(id=>$("#"+id).disabled=!selection);
+  $("#pasteSel").disabled=!selectionClipboard;
   if(bar.classList.contains("show")===visible)return;
   $("#bottomControls").classList.toggle("selecting",visible);
   bar.classList.toggle("show",visible);
@@ -1686,6 +1759,8 @@ $("#canvasEditBtn").onclick=()=>{
 ["editTop","editBottom","editLeft","editRight"].forEach(id=>$("#"+id).addEventListener("input",updateCanvasEditControls));
 $("#applyCanvasSize").onclick=changeCanvasSize;
 $$(".canvasScaleButton").forEach(button=>button.onclick=()=>scaleArtwork(Number(button.dataset.scale)));
+$$(".canvasShrinkButton").forEach(button=>button.onclick=()=>shrinkArtwork(Number(button.dataset.divisor)));
+$("#outlineBtn").onclick=outlineActiveLayer;
 $("#saveMyPalette").onclick=addMyPalette;
 $("#paletteConfirmCancel").onclick=openPaletteManagement;
 $("#paletteNameCancel").onclick=openPaletteManagement;
@@ -1697,18 +1772,27 @@ $("#importPaletteText").onclick=()=>{
 };
 
 $$(".tool").forEach(b=>{
-  if(b.dataset.tool!=="rect")b.onclick=()=>{shapeDraft=null;tool=b.dataset.tool;syncUI();};
+  if(b.dataset.tool!=="rect")b.onclick=()=>setTool(b.dataset.tool);
 });
+function finishSelectionTool(){
+  // Keep copied pixels, but discard the selection buffer and all pending selection input.
+  resetTransientEditState();
+  pointers.clear();pinchStart=null;
+}
+function setTool(nextTool){
+  if(tool==="select" && nextTool!=="select")finishSelectionTool();
+  shapeDraft=null;
+  tool=nextTool;
+  syncUI();
+}
 function selectRectMode(filled){
   rectFilled=filled;
-  shapeDraft=null;
-  tool="rect";
-  syncUI();
+  setTool("rect");
   closeSheets();
 }
 const rectButton=$("#rectTool");
 registerDoubleTap(rectButton,"rect",()=>{
-  shapeDraft=null;tool="rect";syncUI();
+  setTool("rect");
 },()=>{
   $("#rectOutline").classList.toggle("active",!rectFilled);
   $("#rectFilled").classList.toggle("active",rectFilled);
@@ -1807,6 +1891,7 @@ function copySelection(){
     x:selection.x,
     y:selection.y
   };
+  syncSelectionControls();
   toast("選択範囲をコピーしました");
 }
 
@@ -1832,12 +1917,9 @@ function pasteSelection(){
   if(!selectionClipboard)return toast("コピー内容がありません");
   pushUndo();
 
-  // If there is an active selection, clear its current footprint first.
-  if(selection){
-    ensureSelectionBuffer();
-    clearSelectionFootprint();
-  }
-
+  // Commit any existing selection in place. This snapshot excludes the new copy
+  // and must remain unchanged while that copy is moved, even across multiple drags.
+  const background=Uint8Array.from(state.frames[state.activeFrame].layers[state.activeLayer]);
   const baseX = selection ? selection.x : selectionClipboard.x;
   const baseY = selection ? selection.y : selectionClipboard.y;
   selection={
@@ -1845,7 +1927,8 @@ function pasteSelection(){
     y:baseY,
     w:selectionClipboard.w,
     h:selectionClipboard.h,
-    buffer:Uint8Array.from(selectionClipboard.buffer)
+    buffer:Uint8Array.from(selectionClipboard.buffer),
+    background
   };
   drawSelectionBuffer();
   saveLocal();
@@ -1859,6 +1942,7 @@ $("#cutSel").onclick=e=>{e.stopPropagation();cutSelection();};
 $("#pasteSel").onclick=e=>{e.stopPropagation();pasteSelection();};
 $("#trimSel").onclick=e=>{e.stopPropagation();trimToSelection();};
 $("#clearSel").onclick=e=>{e.stopPropagation();clearSelectionState();render()};
+$("#exitSelection").onclick=()=>setTool("pen");
 
 function compositeToCanvas(frameIndex, scale=1){
   const out=document.createElement("canvas");out.width=state.width*scale;out.height=state.height*scale;
@@ -1895,31 +1979,53 @@ function downloadCanvas(c,name){
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   },"image/png");
 }
-function updateExportSize(){
-  const scale=Number($("#exportScale").value)||1;
-  const type=$("#exportType").value;
-  if(type==="loop" && !hasLoopRange()){
-    $("#exportSize").textContent="出力サイズ: ループ範囲が設定されていません";
-    return;
+const MAX_CUSTOM_PNG_SCALE=64,MAX_CUSTOM_PNG_DIMENSION=8192,MAX_CUSTOM_PNG_PIXELS=16777216;
+function getExportOptions(){
+  const custom=$("#exportScale").value==="custom";
+  const raw=custom?$("#exportCustomScale").value.trim():$("#exportScale").value;
+  const scale=Number(raw);
+  if(!/^\d+$/.test(raw) || !Number.isSafeInteger(scale) || scale<1 ||
+     (!custom && ![1,2,3,4,8,16].includes(scale))){
+    throw new Error("倍率には正の整数を入力してください");
   }
+  const type=$("#exportType").value;
+  if(type==="loop" && !hasLoopRange())throw new Error("ループ範囲が設定されていません");
   const frameCount=type==="sprite"?state.frames.length:type==="loop"?state.loopEnd-state.loopStart+1:1;
   const width=state.width*frameCount*scale;
   const height=state.height*scale;
-  $("#exportSize").textContent=`出力サイズ: ${width} × ${height} px`;
+  if(custom && (scale>MAX_CUSTOM_PNG_SCALE || width>MAX_CUSTOM_PNG_DIMENSION ||
+     height>MAX_CUSTOM_PNG_DIMENSION || width*height>MAX_CUSTOM_PNG_PIXELS)){
+    throw new Error("PNG出力上限を超えています（最大64×・8192px・16,777,216画素）");
+  }
+  return {scale,type,width,height};
+}
+function updateExportSize(){
+  $("#exportCustomWrap").hidden=$("#exportScale").value!=="custom";
+  try{
+    const {width,height}=getExportOptions();
+    $("#exportSize").textContent=`出力サイズ: ${width} × ${height} px`;
+    $("#exportPng").disabled=false;
+  }catch(error){
+    $("#exportSize").textContent=`出力サイズ: ${error.message}`;
+    $("#exportPng").disabled=true;
+    if(error.message.startsWith("PNG出力上限"))toast(error.message);
+  }
 }
 function openExportSheet(){
   $("#exportType").value="frame";
   $("#exportName").value=state.projectName;
   $("#exportScale").value="1";
+  $("#exportCustomScale").value="1";
   updateExportSize();
   openSheet("#exportSheet");
 }
 $("#exportType").addEventListener("change",updateExportSize);
 $("#exportScale").addEventListener("change",updateExportSize);
+$("#exportCustomScale").addEventListener("input",updateExportSize);
 $("#exportPng").onclick=()=>{
-  const scale=Number($("#exportScale").value)||1;
-  const type=$("#exportType").value;
-  if(type==="loop" && !hasLoopRange())return toast("ループ範囲が設定されていません");
+  let options;
+  try{options=getExportOptions();}catch(error){return toast(error.message);}
+  const {scale,type}=options;
   const out=type==="sprite"?makeSpriteSheetCanvas(scale)
     : type==="loop"?makeSpriteSheetCanvas(scale,state.loopStart,state.loopEnd)
     : compositeToCanvas(state.activeFrame,scale);
