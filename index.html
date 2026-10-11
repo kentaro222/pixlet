@@ -79,6 +79,8 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 .selbar{display:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .selbar.show{display:grid;align-content:center;height:100%}
 .selbar button{min-width:0}
+#selbar [hidden]{display:none}
+#selectionMoves{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 #exitSelection{grid-column:1/-1}
 .menuLabel{margin:12px 0 5px}
 .menuDisplay button{min-height:38px;padding:6px;font-size:13px}
@@ -119,6 +121,12 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
   <button id="pasteSel">貼付</button>
   <button id="trimSel">切抜</button>
   <button id="clearSel">解除</button>
+  <div id="selectionMoves" hidden>
+    <button id="moveSelLeft" aria-label="選択範囲を左へ1px移動">←</button>
+    <button id="moveSelUp" aria-label="選択範囲を上へ1px移動">↑</button>
+    <button id="moveSelDown" aria-label="選択範囲を下へ1px移動">↓</button>
+    <button id="moveSelRight" aria-label="選択範囲を右へ1px移動">→</button>
+  </div>
   <button id="exitSelection">選択ツールを終了</button>
 </div>
 
@@ -420,7 +428,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v3.2";
+const PIXLET_VERSION = "v3.3";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -1527,6 +1535,10 @@ function syncCenterLineButton(){
 function syncSelectionControls(){
   const bar=$("#selbar"),visible=tool==="select";
   ["flipSel","copySel","cutSel","trimSel","clearSel"].forEach(id=>$("#"+id).disabled=!selection);
+  ["moveSelLeft","moveSelUp","moveSelDown","moveSelRight"].forEach(id=>$("#"+id).disabled=!selection);
+  $("#clearSel").hidden=!selection;
+  $("#selectionMoves").hidden=!selection;
+  $("#exitSelection").hidden=!!selection;
   $("#pasteSel").disabled=!selectionClipboard;
   if(bar.classList.contains("show")===visible)return;
   $("#bottomControls").classList.toggle("selecting",visible);
@@ -1942,6 +1954,10 @@ $("#cutSel").onclick=e=>{e.stopPropagation();cutSelection();};
 $("#pasteSel").onclick=e=>{e.stopPropagation();pasteSelection();};
 $("#trimSel").onclick=e=>{e.stopPropagation();trimToSelection();};
 $("#clearSel").onclick=e=>{e.stopPropagation();clearSelectionState();render()};
+$("#moveSelLeft").onclick=()=>moveSelection(-1,0);
+$("#moveSelUp").onclick=()=>moveSelection(0,-1);
+$("#moveSelDown").onclick=()=>moveSelection(0,1);
+$("#moveSelRight").onclick=()=>moveSelection(1,0);
 $("#exitSelection").onclick=()=>setTool("pen");
 
 function compositeToCanvas(frameIndex, scale=1){
