@@ -24,8 +24,9 @@ button,#projectTitle,#frameInfo{user-select:none;-webkit-user-select:none;-webki
 input,textarea,select{user-select:text;-webkit-user-select:text;-webkit-touch-callout:default}
 #app{height:100dvh;display:flex;flex-direction:column;padding:max(8px,env(safe-area-inset-top)) 8px max(8px,env(safe-area-inset-bottom));gap:7px}
 #app > :not(#canvasWrap){flex-shrink:0}
-header{display:grid;grid-template-columns:44px minmax(0,1fr);gap:6px;align-items:center}
+header{display:grid;grid-template-columns:44px minmax(0,1fr) max-content;gap:6px;align-items:center}
 header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#canvasSize{white-space:nowrap;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .icon{font-size:20px}
 #canvasWrap{position:relative;flex:1;min-height:0;overflow:hidden;border-radius:16px;background:#0b0d11;touch-action:none}
 #view{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
@@ -96,6 +97,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 <header>
   <button id="menuBtn" class="icon">☰</button>
   <div class="title" id="projectTitle" role="button" tabindex="0">untitled</div>
+  <span id="canvasSize" aria-label="キャンバスサイズ">16×16</span>
 </header>
 
 <div id="framebar">
@@ -428,7 +430,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v3.3";
+const PIXLET_VERSION = "v3.4";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -851,6 +853,7 @@ function drawComposite(frameIndex,alpha=1,tint=null,previewPixels=null){
   ctx.globalAlpha=1;
 }
 function render(){
+  $("#canvasSize").textContent=`${state.width}×${state.height}`;
   // The lower controls swap in place; keep the backing canvas aligned with their layout.
   syncSelectionControls();
   const r=wrap.getBoundingClientRect();
