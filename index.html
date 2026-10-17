@@ -65,6 +65,11 @@ header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white
 .paletteSamples span{height:22px;border-radius:5px;border:1px solid #ffffff33}
 .paletteActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .paletteActions button{min-width:0}
+#paletteSwapColors{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.paletteSwapSlot{min-width:0;text-shadow:0 1px 2px #000;color:#fff;border:2px solid #ffffff33}
+.paletteSwapSlot.source{outline:2px solid var(--accent);outline-offset:-2px}
+.paletteSwapSlot.target{outline:2px solid var(--danger);outline-offset:-2px}
+#swapPaletteColors:disabled{opacity:.45}
 #colorPicker{width:100%;height:56px;border:0;background:none}
 #framesGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .frameThumb{aspect-ratio:1;background:#0b0d11;border-radius:10px;position:relative;overflow:hidden;border:2px solid transparent}
@@ -255,6 +260,11 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 
 <div id="paletteManageSheet" class="sheet">
   <h3>パレット管理</h3>
+  <h4>色の入れ替え</h4>
+  <p class="small">現在の作品の2色を選びます。作品の表示色も一緒に変わります。</p>
+  <div id="paletteSwapColors"></div>
+  <p id="paletteSwapInfo" class="small"></p>
+  <button id="swapPaletteColors" style="width:100%" disabled>入れ替える</button>
   <h4>標準パレット</h4>
   <div id="palettePresets"></div>
   <h4>マイパレット <span id="myPaletteCount" class="small"></span></h4>
@@ -430,7 +440,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v3.4";
+const PIXLET_VERSION = "v3.5";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -462,6 +472,7 @@ let rectFilled=false;
 let gridVisible=loadGridVisible();
 let centerLineVisible=loadCenterLineVisible();
 let myPalettes=loadMyPalettes();
+let paletteSwapSlots=[];
 const PLAY_SPEEDS=[
   {label:"遅", ms:420},
   {label:"普", ms:240},
@@ -756,7 +767,41 @@ async function copyPalette(palette){
   }
   toast(copied?"パレットテキストをコピーしました":"コピーできませんでした");
 }
+function renderPaletteSwap(){
+  const row=$("#paletteSwapColors");row.innerHTML="";
+  for(let slot=1;slot<=7;slot++){
+    const button=document.createElement("button");
+    const chosen=paletteSwapSlots.indexOf(slot);
+    button.className="paletteSwapSlot"+(chosen===0?" source":chosen===1?" target":"");
+    button.style.background=state.palette[slot];
+    button.textContent=String(slot);
+    button.title=`${slot}番${chosen===0?"（交換元）":chosen===1?"（交換先）":""}`;
+    button.ariaPressed=chosen>=0?"true":"false";
+    button.onclick=()=>{
+      if(paletteSwapSlots.includes(slot))paletteSwapSlots=paletteSwapSlots.filter(value=>value!==slot);
+      else paletteSwapSlots=paletteSwapSlots.length===2?[slot]:[...paletteSwapSlots,slot];
+      renderPaletteSwap();
+    };
+    row.appendChild(button);
+  }
+  $("#paletteSwapInfo").textContent=paletteSwapSlots.length===2
+    ? `${paletteSwapSlots[0]}番 ↔ ${paletteSwapSlots[1]}番`
+    : paletteSwapSlots.length===1?`${paletteSwapSlots[0]}番 → 交換先を選んでください`:"交換する2色を選んでください";
+  $("#swapPaletteColors").disabled=paletteSwapSlots.length!==2;
+}
+function swapPaletteColors(){
+  const [a,b]=paletteSwapSlots;
+  if(![a,b].every(slot=>Number.isInteger(slot)&&slot>=1&&slot<=7) || a===b)return;
+  if(state.palette[a]===state.palette[b])return toast("同じ色のため変更はありません");
+  pushUndo();
+  [state.palette[a],state.palette[b]]=[state.palette[b],state.palette[a]];
+  paletteSwapSlots=[];
+  saveLocal();
+  syncUI();
+  toast("色を入れ替えました");
+}
 function renderPaletteManagement(){
+  renderPaletteSwap();
   const presets=$("#palettePresets"),mine=$("#myPaletteList");
   presets.innerHTML="";mine.innerHTML="";
   PALETTE_PRESETS.forEach(p=>{
@@ -792,6 +837,7 @@ function renderPaletteManagement(){
   $("#paletteLimitInfo").textContent=myPalettes.length>=7?"最大7件です。既存パレットを上書きまたは削除してください。":"";
 }
 function openPaletteManagement(){
+  paletteSwapSlots=[];
   renderPaletteManagement();
   openSheet("#paletteManageSheet");
 }
@@ -837,6 +883,30 @@ function getVisibleCompositeColor(frame,x,y,previewPixels=null){
   }
   return color;
 }
+function fillViewportRect(x,y,width,height){
+  // Adjacent rectangles must share physical-pixel edges. Fractional pan offsets
+  // otherwise expose antialiased seams that look like a grid even when it is off.
+  const left=Math.round(x*devicePixelRatio),top=Math.round(y*devicePixelRatio);
+  const right=Math.round((x+width)*devicePixelRatio),bottom=Math.round((y+height)*devicePixelRatio);
+  ctx.fillRect(left/devicePixelRatio,top/devicePixelRatio,(right-left)/devicePixelRatio,(bottom-top)/devicePixelRatio);
+}
+function drawCanvasBackground(){
+  const width=state.width*zoom,height=state.height*zoom;
+  const size=Math.max(4,Math.floor(zoom/2));
+  ctx.fillStyle="#2b303a";
+  fillViewportRect(offsetX,offsetY,width,height);
+  ctx.fillStyle="#20242c";
+  for(let row=0;row*size<height;row++)for(let col=0;col*size<width;col++){
+    if((row+col)%2)fillViewportRect(offsetX+col*size,offsetY+row*size,
+      Math.min(size,width-col*size),Math.min(size,height-row*size));
+  }
+}
+function drawCanvasGrid(){
+  if(!gridVisible || zoom<10)return;
+  ctx.strokeStyle="rgba(255,255,255,.09)";ctx.lineWidth=1;
+  for(let x=0;x<=state.width;x++){ctx.beginPath();ctx.moveTo(offsetX+x*zoom+.5,offsetY);ctx.lineTo(offsetX+x*zoom+.5,offsetY+state.height*zoom);ctx.stroke();}
+  for(let y=0;y<=state.height;y++){ctx.beginPath();ctx.moveTo(offsetX,offsetY+y*zoom+.5);ctx.lineTo(offsetX+state.width*zoom,offsetY+y*zoom+.5);ctx.stroke();}
+}
 function drawComposite(frameIndex,alpha=1,tint=null,previewPixels=null){
   if(frameIndex<0||frameIndex>=state.frames.length) return;
   const f=state.frames[frameIndex];
@@ -846,7 +916,7 @@ function drawComposite(frameIndex,alpha=1,tint=null,previewPixels=null){
       if(c){
         ctx.globalAlpha=alpha;
         ctx.fillStyle=tint || state.palette[c];
-        ctx.fillRect(offsetX+x*zoom,offsetY+y*zoom,zoom,zoom);
+        fillViewportRect(offsetX+x*zoom,offsetY+y*zoom,zoom,zoom);
       }
     }
   }
@@ -860,23 +930,12 @@ function render(){
   ctx.clearRect(0,0,r.width,r.height);
   ctx.fillStyle="#0b0d11"; ctx.fillRect(0,0,r.width,r.height);
 
-  // checker background
-  const s=Math.max(4,Math.floor(zoom/2));
-  for(let y=0;y<state.height*zoom;y+=s){
-    for(let x=0;x<state.width*zoom;x+=s){
-      ctx.fillStyle=((x/s+y/s)%2)?"#20242c":"#2b303a";
-      ctx.fillRect(offsetX+x,offsetY+y,s,s);
-    }
-  }
+  drawCanvasBackground();
 
   if(onion && !playing && state.activeFrame>0) drawComposite(state.activeFrame-1,.2,"#ff6f6f");
   drawComposite(state.activeFrame,1,null,shapeDraft?getShapePixels(shapeDraft):null);
 
-  if(gridVisible && zoom>=10){
-    ctx.strokeStyle="rgba(255,255,255,.09)"; ctx.lineWidth=1;
-    for(let x=0;x<=state.width;x++){ctx.beginPath();ctx.moveTo(offsetX+x*zoom+.5,offsetY);ctx.lineTo(offsetX+x*zoom+.5,offsetY+state.height*zoom);ctx.stroke();}
-    for(let y=0;y<=state.height;y++){ctx.beginPath();ctx.moveTo(offsetX,offsetY+y*zoom+.5);ctx.lineTo(offsetX+state.width*zoom,offsetY+y*zoom+.5);ctx.stroke();}
-  }
+  drawCanvasGrid();
 
   if(centerLineVisible){
     ctx.strokeStyle="rgba(110,168,254,.55)";ctx.lineWidth=1.5;
@@ -1569,6 +1628,7 @@ function syncUI(){
   syncSelectionControls();
   syncLayerControls();
   renderPalette();
+  renderPaletteSwap();
   renderFrameGrid();
   updateCanvasEditControls();
   render();
@@ -1777,6 +1837,7 @@ $$(".canvasScaleButton").forEach(button=>button.onclick=()=>scaleArtwork(Number(
 $$(".canvasShrinkButton").forEach(button=>button.onclick=()=>shrinkArtwork(Number(button.dataset.divisor)));
 $("#outlineBtn").onclick=outlineActiveLayer;
 $("#saveMyPalette").onclick=addMyPalette;
+$("#swapPaletteColors").onclick=swapPaletteColors;
 $("#paletteConfirmCancel").onclick=openPaletteManagement;
 $("#paletteNameCancel").onclick=openPaletteManagement;
 $("#importPaletteText").onclick=()=>{
