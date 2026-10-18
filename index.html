@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>Pixlet</title>
+<link rel="icon" type="image/png" sizes="16x16" href="favicon.png">
 <style>
 :root{
   --bg:#111318;
@@ -260,8 +261,8 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 
 <div id="paletteManageSheet" class="sheet">
   <h3>パレット管理</h3>
-  <h4>色の入れ替え</h4>
-  <p class="small">現在の作品の2色を選びます。作品の表示色も一緒に変わります。</p>
+  <h4>作品の色を入れ替え</h4>
+  <p class="small">パレットの位置は変えず、全フレーム・全レイヤーの作品内の2色を入れ替えます。</p>
   <div id="paletteSwapColors"></div>
   <p id="paletteSwapInfo" class="small"></p>
   <button id="swapPaletteColors" style="width:100%" disabled>入れ替える</button>
@@ -406,6 +407,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
   <textarea id="codeArea" spellcheck="false"></textarea>
   <div class="row" style="margin-top:8px">
     <button id="copyCode">コピー</button>
+    <button id="clearCode">クリア</button>
     <button id="loadCode">コード読込</button>
   </div>
   <div class="row" style="margin-top:8px">
@@ -440,7 +442,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v3.5";
+const PIXLET_VERSION = "v3.6";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -789,16 +791,30 @@ function renderPaletteSwap(){
     : paletteSwapSlots.length===1?`${paletteSwapSlots[0]}番 → 交換先を選んでください`:"交換する2色を選んでください";
   $("#swapPaletteColors").disabled=paletteSwapSlots.length!==2;
 }
-function swapPaletteColors(){
+function swapArtworkColors(){
   const [a,b]=paletteSwapSlots;
   if(![a,b].every(slot=>Number.isInteger(slot)&&slot>=1&&slot<=7) || a===b)return;
-  if(state.palette[a]===state.palette[b])return toast("同じ色のため変更はありません");
+  const matches=color=>color===a || color===b;
+  if(!state.frames.some(frame=>frame.layers.some(layer=>layer.some(matches))) && !selection?.buffer?.some(matches)){
+    return toast("作品内に選択した色がありません");
+  }
   pushUndo();
-  [state.palette[a],state.palette[b]]=[state.palette[b],state.palette[a]];
+  const swapPixels=pixels=>{
+    if(!pixels)return;
+    for(let i=0;i<pixels.length;i++){
+      const color=pixels[i];
+      pixels[i]=color===a?b:color===b?a:color;
+    }
+  };
+  state.frames.forEach(frame=>frame.layers.forEach(swapPixels));
+  // Cached selection content and backgrounds must agree with the edited layers;
+  // otherwise the next move would redraw the old color numbers. Keep the clipboard unchanged.
+  if(selection){swapPixels(selection.buffer);swapPixels(selection.background);}
+  if(selectionDrag)swapPixels(selectionDrag.layer);
   paletteSwapSlots=[];
   saveLocal();
   syncUI();
-  toast("色を入れ替えました");
+  toast("作品の色を入れ替えました");
 }
 function renderPaletteManagement(){
   renderPaletteSwap();
@@ -1837,7 +1853,7 @@ $$(".canvasScaleButton").forEach(button=>button.onclick=()=>scaleArtwork(Number(
 $$(".canvasShrinkButton").forEach(button=>button.onclick=()=>shrinkArtwork(Number(button.dataset.divisor)));
 $("#outlineBtn").onclick=outlineActiveLayer;
 $("#saveMyPalette").onclick=addMyPalette;
-$("#swapPaletteColors").onclick=swapPaletteColors;
+$("#swapPaletteColors").onclick=swapArtworkColors;
 $("#paletteConfirmCancel").onclick=openPaletteManagement;
 $("#paletteNameCancel").onclick=openPaletteManagement;
 $("#importPaletteText").onclick=()=>{
@@ -2134,6 +2150,7 @@ function loadCode(code){
   if(project.projectName!==lines[1].slice("Name: ".length))throw new Error("name mismatch");
   return normalizeLoaded(project);
 }
+$("#clearCode").onclick=()=>{$("#codeArea").value="";};
 $("#copyCode").onclick=async()=>{
   const text=$("#codeArea").value;
   let ok=false;
