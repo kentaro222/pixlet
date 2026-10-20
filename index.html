@@ -451,7 +451,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v3.7";
+const PIXLET_VERSION = "v3.8";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -819,7 +819,7 @@ function swapArtworkColors(){
   // Cached selection content and backgrounds must agree with the edited layers;
   // otherwise the next move would redraw the old color numbers. Keep the clipboard unchanged.
   if(selection){swapPixels(selection.buffer);swapPixels(selection.background);}
-  if(selectionDrag)swapPixels(selectionDrag.layer);
+  if(selectionDrag){swapPixels(selectionDrag.layer);swapPixels(selectionDrag.background);}
   paletteSwapSlots=[];
   saveLocal();
   syncUI();
@@ -1088,11 +1088,12 @@ function beginAction(cell){
     if(selection){
       if(cellInSelection(cell)){
         ensureSelectionBuffer();
+        ensureSelectionBackground();
         selectionDrag={
           pointerX:cell.x,pointerY:cell.y,
           startX:selection.x,startY:selection.y,
-          // Pasted copies float over their original background, including on later drags.
-          layer:Uint8Array.from(selection.background || state.frames[state.activeFrame].layers[state.activeLayer]),
+          layer:Uint8Array.from(state.frames[state.activeFrame].layers[state.activeLayer]),
+          background:Uint8Array.from(selection.background),
           historyRecorded:false
         };
         drawing=true;
@@ -1128,10 +1129,7 @@ function moveAction(cell){
         // Rebuild every position from pointerdown: clearing the previous preview
         // would erase overlapping pixels and can permanently lose destination pixels.
         const layer=state.frames[state.activeFrame].layers[state.activeLayer];
-        layer.set(selectionDrag.layer);
-        selection.x=selectionDrag.startX;
-        selection.y=selectionDrag.startY;
-        if(!selection.background)clearSelectionFootprint();
+        layer.set(selectionDrag.background);
         selection.x=selectionDrag.startX+dx;
         selection.y=selectionDrag.startY+dy;
         drawSelectionBuffer();
@@ -1169,12 +1167,25 @@ function ensureSelectionBuffer(){
   return buf;
 }
 
+function ensureSelectionBackground(){
+  if(!selection || selection.background)return;
+  ensureSelectionBuffer();
+  const background=Uint8Array.from(state.frames[state.activeFrame].layers[state.activeLayer]);
+  const left=Math.max(0,selection.x),right=Math.min(state.width,selection.x+selection.w);
+  const top=Math.max(0,selection.y),bottom=Math.min(state.height,selection.y+selection.h);
+  // Cut the original rectangle out once, without changing live pixels or history.
+  // Keep this background across drags and arrow taps: a previous composite must
+  // never become the background, or crossing existing artwork would erase it.
+  if(left<right)for(let y=top;y<bottom;y++)background.fill(0,idx(left,y),idx(right,y));
+  selection.background=background;
+}
+
 function clearSelectionFootprint(){
   if(!selection)return;
   const {x,y,w,h}=selection;
   const layer=state.frames[state.activeFrame].layers[state.activeLayer];
   if(selection.background){
-    // Removing a floating copy reveals its background rather than erasing its rectangle.
+    // Removing a floating selection reveals its background rather than erasing its rectangle.
     layer.set(selection.background);
     return;
   }
@@ -1197,8 +1208,8 @@ function drawSelectionBuffer(){
       const tx=x+xx, ty=y+yy;
       if(tx>=0&&ty>=0&&tx<state.width&&ty<state.height){
         const color=buffer[yy*w+xx];
-        // Only pasted selections use transparent compositing; normal moves keep their cutout semantics.
-        if(color || !selection.background)layer[idx(tx,ty)]=color;
+        // Transparent cells reveal the destination background for both cutouts and pasted copies.
+        if(color)layer[idx(tx,ty)]=color;
       }
     }
   }
@@ -1209,6 +1220,7 @@ function moveSelection(dx,dy){
   pushUndo();
 
   ensureSelectionBuffer();
+  ensureSelectionBackground();
   clearSelectionFootprint();
 
   // Keep the selection position even outside the canvas.
