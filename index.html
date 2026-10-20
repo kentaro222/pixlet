@@ -427,9 +427,18 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
     <label>フレーム幅<input id="pngFrameW" type="number" min="1" max="64" value="16"></label>
     <label>高さ<input id="pngFrameH" type="number" min="1" max="64" value="16"></label>
   </div>
-  <p class="small">横一列のスプライトシートとして読み込みます。透明＋不透明7色以内。半透明は非対応です。</p>
+  <p class="small">横一列のスプライトシートとして読み込みます。8色以上は確認後に7色へ自動減色します。半透明は非対応です。</p>
   <button id="pngImportDo" style="width:100%;margin-top:8px">読み込む</button>
   <button class="closeSheet" style="width:100%;margin-top:8px">閉じる</button>
+</div>
+
+<div id="pngReduceSheet" class="sheet">
+  <h3>PNGの自動減色</h3>
+  <p id="pngReduceMessage"></p>
+  <div class="row">
+    <button id="pngReduceDo">減色して読み込む</button>
+    <button id="pngReduceCancel">キャンセル</button>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -442,7 +451,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v3.6";
+const PIXLET_VERSION = "v3.7";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -2210,7 +2219,7 @@ $("#importTxt").addEventListener("change",async e=>{
 });
 
 
-let pendingPng=null;
+let pendingPng=null,pendingPngImport=null,pngLoadSequence=0;
 
 function analyzePngImage(img){
   const c=document.createElement("canvas");
@@ -2228,56 +2237,143 @@ function analyzePngImage(img){
     const key=`${data[i]},${data[i+1]},${data[i+2]}`;
     colors.set(key,(colors.get(key)||0)+1);
   }
-  return {canvas:c,colors:[...colors.keys()],hasTransparent,hasSemi,width:c.width,height:c.height};
+  return {colors:[...colors.keys()],colorCounts:[...colors.values()],data,
+    hasTransparent,hasSemi,width:c.width,height:c.height};
+}
+
+function updatePngInfo(){
+  const a=pendingPng;
+  if(!a)return;
+  let message=`画像 ${a.width}×${a.height} / 不透明色 ${a.colors.length}色${a.hasTransparent?" + 透明":""}`;
+  if(a.hasSemi)message+=" / 半透明あり（読込不可）";
+  else if(a.colors.length>7)message+=" / 7色への自動減色が必要";
+  const fw=Number($("#pngFrameW").value),fh=Number($("#pngFrameH").value);
+  if(!Number.isInteger(fw)||!Number.isInteger(fh)||fw<1||fh<1||fw>64||fh>64){
+    message+=" / フレームサイズは1〜64pxにしてください";
+  }else if(a.height!==fh){
+    message+=" / 画像の高さとフレーム高さが一致しません";
+  }else if(a.width%fw!==0){
+    message+=" / 画像幅がフレーム幅で割り切れません";
+  }else{
+    message+=` / 推定: ${fw}×${fh} / ${a.width/fw}フレーム`;
+  }
+  $("#pngInfo").textContent=message;
+}
+$("#pngFrameW").addEventListener("input",updatePngInfo);
+$("#pngFrameH").addEventListener("input",updatePngInfo);
+
+function pngColorDistance(a,b){
+  // Weighted RGB squared distance: green differences matter more than blue.
+  return .299*(a[0]-b[0])**2+.587*(a[1]-b[1])**2+.114*(a[2]-b[2])**2;
+}
+function reducePngColors(image){
+  const points=image.colors.map((key,i)=>({key,rgb:key.split(",").map(Number),count:image.colorCounts[i]}));
+  // Stable RGB ordering resolves ties independently of scan order. No random seeds.
+  points.sort((a,b)=>a.rgb[0]-b.rgb[0] || a.rgb[1]-b.rgb[1] || a.rgb[2]-b.rgb[2]);
+  let first=points[0];
+  for(const point of points)if(point.count>first.count)first=point;
+  let centers=[first.rgb.slice()];
+  while(centers.length<7){
+    let candidate=null,best=-1;
+    for(const point of points){
+      const score=Math.min(...centers.map(center=>pngColorDistance(point.rgb,center)))*point.count;
+      if(score>best){best=score;candidate=point;}
+    }
+    if(best<=0)break;
+    centers.push(candidate.rgb.slice());
+  }
+  const nearest=(rgb,palette)=>{
+    let index=0,best=Infinity;
+    for(let i=0;i<palette.length;i++){
+      const distance=pngColorDistance(rgb,palette[i]);
+      if(distance<best){best=distance;index=i;}
+    }
+    return index;
+  };
+  for(let iteration=0;iteration<24;iteration++){
+    const sums=centers.map(()=>[0,0,0,0]);
+    for(const point of points){
+      const sum=sums[nearest(point.rgb,centers)];
+      for(let channel=0;channel<3;channel++)sum[channel]+=point.rgb[channel]*point.count;
+      sum[3]+=point.count;
+    }
+    const next=centers.map((center,i)=>sums[i][3]
+      ? sums[i].slice(0,3).map(value=>value/sums[i][3]) : center);
+    const converged=next.every((center,i)=>pngColorDistance(center,centers[i])<.01);
+    centers=next;
+    if(converged)break;
+  }
+  // Rounded representatives can coincide; keep one slot per resulting RGB color.
+  centers=[...new Map(centers.map(center=>{
+    const rgb=center.map(Math.round);return [rgb.join(","),rgb];
+  })).values()];
+  return {
+    colors:centers.map(rgb=>rgbToHex(...rgb)),
+    colorToIndex:new Map(points.map(point=>[point.key,nearest(point.rgb,centers)+1]))
+  };
 }
 
 $("#pngFile").addEventListener("change",e=>{
   const file=e.target.files?.[0];
+  const sequence=++pngLoadSequence;
   pendingPng=null;
+  pendingPngImport=null;
   if(!file){$("#pngInfo").textContent="PNGを選択してください。";return;}
+  $("#pngInfo").textContent="PNGを読み込んでいます。";
   const url=URL.createObjectURL(file);
   const img=new Image();
   img.onload=()=>{
     try{
+      if(sequence!==pngLoadSequence)return;
       const a=analyzePngImage(img);
       pendingPng={...a,fileName:file.name};
-      $("#pngFrameW").value=Math.min(64,a.width);
-      $("#pngFrameH").value=Math.min(64,a.height);
-      const colorText=`不透明色 ${a.colors.length}色${a.hasTransparent?" + 透明":""}`;
-      let msg=`画像 ${a.width}×${a.height} / ${colorText}`;
-      if(a.hasSemi) msg+=" / 半透明あり（読込不可）";
-      if(a.colors.length>7) msg+=" / 色数超過（読込不可）";
-      $("#pngInfo").textContent=msg;
+      $("#pngFrameW").value=a.height;
+      $("#pngFrameH").value=a.height;
+      updatePngInfo();
+    }catch(error){
+      pendingPng=null;
+      $("#pngInfo").textContent="PNGを読み込めません。";
     }finally{
       URL.revokeObjectURL(url);
     }
   };
-  img.onerror=()=>{URL.revokeObjectURL(url);$("#pngInfo").textContent="PNGを読み込めません。"};
+  img.onerror=()=>{
+    URL.revokeObjectURL(url);
+    if(sequence===pngLoadSequence)$("#pngInfo").textContent="PNGを読み込めません。";
+  };
   img.src=url;
 });
 
-$("#pngImportDo").onclick=()=>{
+function getPngImportRequest(){
+  if(!pendingPng)throw new Error("PNG未選択");
+  const a=pendingPng;
+  if(a.hasSemi)throw new Error("半透明ピクセルがあります");
+  const fw=Number($("#pngFrameW").value),fh=Number($("#pngFrameH").value);
+  if(!Number.isInteger(fw)||!Number.isInteger(fh)||fw<1||fh<1||fw>64||fh>64)throw new Error("フレームサイズは1〜64");
+  if(a.height!==fh)throw new Error("画像の高さとフレーム高さが一致しません");
+  if(a.width%fw!==0)throw new Error("画像幅がフレーム幅で割り切れません");
+  return {image:a,fw,fh};
+}
+function importPng(request,reduceColors=false){
   try{
-    if(!pendingPng) throw new Error("PNG未選択");
-    const a=pendingPng;
+    const {image:a,fw,fh}=request;
+    if(a!==pendingPng)throw new Error("PNGを選択し直してください");
     if(a.hasSemi) throw new Error("半透明ピクセルがあります");
-    if(a.colors.length>7) throw new Error(`使用色が${a.colors.length}色あります`);
-    const fw=+$("#pngFrameW").value, fh=+$("#pngFrameH").value;
-    if(!Number.isInteger(fw)||!Number.isInteger(fh)||fw<1||fh<1||fw>64||fh>64) throw new Error("フレームサイズは1〜64");
-    if(a.height!==fh) throw new Error("画像の高さとフレーム高さが一致しません");
-    if(a.width%fw!==0) throw new Error("画像幅がフレーム幅で割り切れません");
     const frameCount=a.width/fw;
-    if(frameCount<1) throw new Error("フレーム数が不正です");
-
-    const palette=["transparent", ...a.colors.map(k=>{
-      const [r,g,b]=k.split(",").map(Number);
-      return rgbToHex(r,g,b);
-    })];
+    if(frameCount<1)throw new Error("フレーム数が不正です");
+    if(a.colors.length>7 && !reduceColors)throw new Error("自動減色の確認が必要です");
+    const mapped=a.colors.length>7?reducePngColors(a):{
+      colors:a.colors.map(k=>{
+        const [r,g,b]=k.split(",").map(Number);
+        return rgbToHex(r,g,b);
+      }),
+      colorToIndex:new Map(a.colors.map((key,i)=>[key,i+1]))
+    };
+    const palette=["transparent",...mapped.colors];
     while(palette.length<8) palette.push("#000000");
 
-    const cx=a.canvas.getContext("2d",{willReadFrequently:true});
-    const imgData=cx.getImageData(0,0,a.width,a.height).data;
-    const colorToIndex=new Map(a.colors.map((k,i)=>[k,i+1]));
+    const imgData=a.data;
+    const colorToIndex=mapped.colorToIndex;
     const frames=[];
     for(let f=0;f<frameCount;f++){
       const fr=makeFrame(fw,fh);
@@ -2288,7 +2384,9 @@ $("#pngImportDo").onclick=()=>{
           const alpha=imgData[px+3];
           if(alpha===0){layer[y*fw+x]=0;continue;}
           const key=`${imgData[px]},${imgData[px+1]},${imgData[px+2]}`;
-          layer[y*fw+x]=colorToIndex.get(key)||0;
+          const color=colorToIndex.get(key);
+          if(color===undefined)throw new Error("PNGの色を変換できません");
+          layer[y*fw+x]=color;
         }
       }
       frames.push(fr);
@@ -2311,6 +2409,22 @@ $("#pngImportDo").onclick=()=>{
   }catch(err){
     toast(err.message || "PNGを読み込めません");
   }
+}
+$("#pngImportDo").onclick=()=>{
+  try{
+    const request=getPngImportRequest();
+    if(request.image.colors.length>7){
+      pendingPngImport=request;
+      $("#pngReduceMessage").textContent=`このPNGは不透明色が${request.image.colors.length}色あります。似た色をまとめて7色に自動減色して読み込みますか？`;
+      openSheet("#pngReduceSheet");
+    }else importPng(request);
+  }catch(error){toast(error.message || "PNGを読み込めません");}
+};
+$("#pngReduceCancel").onclick=()=>{pendingPngImport=null;openSheet("#pngSheet");};
+$("#pngReduceDo").onclick=()=>{
+  const request=pendingPngImport;
+  pendingPngImport=null;
+  if(request)importPng(request,true);
 };
 
 $("#resizeBtn").onclick=()=>{
