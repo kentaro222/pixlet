@@ -451,7 +451,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v3.8";
+const PIXLET_VERSION = "v3.9";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -2129,7 +2129,7 @@ function updateExportSize(){
   }
 }
 function openExportSheet(){
-  $("#exportType").value="frame";
+  $("#exportType").value="sprite";
   $("#exportName").value=state.projectName;
   $("#exportScale").value="1";
   $("#exportCustomScale").value="1";
