@@ -451,7 +451,7 @@ document.addEventListener("contextmenu",e=>{
   if(e.target.closest?.("button,#projectTitle,#frameInfo"))e.preventDefault();
 });
 
-const PIXLET_VERSION = "v3.9";
+const PIXLET_VERSION = "v4.0";
 document.title = `Pixlet ${PIXLET_VERSION}`;
 
 const SAVE_DATA_VERSION = 2;
@@ -498,6 +498,22 @@ function makeLayer(w,h){ return new Uint8Array(w*h); }
 function makeFrame(w,h){ return {layers:[makeLayer(w,h),makeLayer(w,h),makeLayer(w,h)]}; }
 
 function normalizeLoaded(obj){
+  // Validate all artwork before replacing the current project or writing storage.
+  if(!obj || typeof obj!=="object" ||
+     (obj.version!==undefined && obj.version!==SAVE_DATA_VERSION) ||
+     !Number.isInteger(obj.width) || obj.width<1 || obj.width>64 ||
+     !Number.isInteger(obj.height) || obj.height<1 || obj.height>64 ||
+     !Array.isArray(obj.palette) || obj.palette.length!==8 || obj.palette[0]!=="transparent" ||
+     !validPaletteColors(obj.palette.slice(1)) ||
+     !Array.isArray(obj.frames) || obj.frames.length===0){
+    throw new Error("invalid project");
+  }
+  const pixelCount=obj.width*obj.height;
+  if(!obj.frames.every(frame=>frame && Array.isArray(frame.layers) && frame.layers.length===3 &&
+     frame.layers.every(layer=>Array.isArray(layer) && layer.length===pixelCount &&
+       layer.every(color=>Number.isInteger(color) && color>=0 && color<8)))){
+    throw new Error("invalid layers");
+  }
   obj.projectName = typeof obj.projectName==="string" ? obj.projectName : "untitled";
   obj.frames = obj.frames.map(f => ({layers:f.layers.map(a => Uint8Array.from(a))}));
   // Invalid or outdated indices must never reach playback or sprite export.
@@ -507,10 +523,12 @@ function normalizeLoaded(obj){
   if(obj.loopStart!==null && obj.loopEnd!==null && obj.loopStart>obj.loopEnd){
     [obj.loopStart,obj.loopEnd]=[obj.loopEnd,obj.loopStart];
   }
-  obj.activeFrame = Math.min(obj.activeFrame||0,obj.frames.length-1);
-  obj.activeLayer = obj.activeLayer ?? 1;
-  obj.activeColor = obj.activeColor ?? 1;
-  if(!Array.isArray(obj.layerVisible) || obj.layerVisible.length!==3) obj.layerVisible=[true,true,true];
+  const validIndex=(value,length,fallback)=>Number.isInteger(value) && value>=0 && value<length?value:fallback;
+  obj.activeFrame = validIndex(obj.activeFrame,obj.frames.length,0);
+  obj.activeLayer = validIndex(obj.activeLayer,3,1);
+  obj.activeColor = validIndex(obj.activeColor,8,1);
+  if(!Array.isArray(obj.layerVisible) || obj.layerVisible.length!==3 ||
+     !obj.layerVisible.every(value=>typeof value==="boolean")) obj.layerVisible=[true,true,true];
   if(!obj.layerVisible.some(Boolean)) obj.layerVisible=[true,true,true];
   if(!obj.layerVisible[obj.activeLayer]){
     const firstVisible=obj.layerVisible.findIndex(Boolean);
@@ -1035,9 +1053,7 @@ function setPixel(x,y,color){
   state.frames[state.activeFrame].layers[state.activeLayer][idx(x,y)]=color;
 }
 function getTopColor(x,y){
-  const f=state.frames[state.activeFrame];
-  for(let l=2;l>=0;l--){const v=f.layers[l][idx(x,y)];if(v)return v}
-  return 0;
+  return getVisibleCompositeColor(state.frames[state.activeFrame],x,y);
 }
 function flood(x,y,newC){
   const a=state.frames[state.activeFrame].layers[state.activeLayer], old=a[idx(x,y)];
@@ -1114,7 +1130,11 @@ function moveAction(cell){
   if(shapeDraft){
     shapeDraft.end=cell;
   } else if(tool==="pen"&&drawing){
-    if(!lastCell||cell.x!==lastCell.x||cell.y!==lastCell.y){setPixel(cell.x,cell.y,state.activeColor);lastCell=cell;}
+    if(!lastCell||cell.x!==lastCell.x||cell.y!==lastCell.y){
+      forEachShapeCell({tool:"line",start:lastCell||cell,end:cell},
+        (x,y)=>setPixel(x,y,state.activeColor));
+      lastCell=cell;
+    }
   } else if(tool==="select"&&drawing){
     if(selectionDrag && selection){
       const dx=cell.x-selectionDrag.pointerX;
