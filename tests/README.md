@@ -14,4 +14,6 @@ manager. Set `CHROMIUM_PATH` if the browser is not at `/usr/bin/chromium`.
 The tests start their own local HTTP server on an available port and use isolated
 browser contexts. They cover invalid project rejection without overwriting work,
 v2 project roundtrips, index recovery, continuous pen strokes with undo/redo, and
-color picking with hidden layers. They do not change browser user profiles.
+color picking with hidden layers, new-canvas palette selection, and PNG import
+into a visible MAIN layer (including automatic color reduction). They do not
+change browser user profiles.

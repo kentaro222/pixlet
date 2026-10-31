@@ -216,8 +216,11 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
   <h3>新規キャンバス</h3>
   <div class="row">
     <label>幅<input id="wInput" type="number" min="4" max="64" value="16"></label>
-    <label>高さ<input id="hInput" type="number" min="4" max="64" value="16"></label>
+    <label>高さ<input id="newCanvasHeight" type="number" min="4" max="64" value="16"></label>
   </div>
+  <label style="display:block;margin-top:10px">パレット
+    <select id="newCanvasPalette" class="fieldControl"></select>
+  </label>
   <div class="row" style="margin-top:10px">
     <button id="resizeBtn">作成</button>
     <button class="closeSheet">キャンセル</button>
@@ -1879,7 +1882,12 @@ $("#fitViewBtn").onclick=()=>{
   render();
 };
 $("#newCanvasBtn").onclick=()=>{
-  $("#wInput").value="16";$("#hInput").value="16";
+  $("#wInput").value="16";$("#newCanvasHeight").value="16";
+  $("#newCanvasPalette").replaceChildren(...PALETTE_PRESETS.map((preset,index)=>{
+    const option=document.createElement("option");
+    option.value=String(index);option.textContent=preset.name;
+    return option;
+  }));
   openSheet("#newCanvasSheet");
 };
 $("#paletteManageBtn").onclick=openPaletteManagement;
@@ -2433,6 +2441,7 @@ function importPng(request,reduceColors=false){
     state.loopStart=null;
     state.loopEnd=null;
     state.activeLayer=1;
+    state.layerVisible=DEFAULT.layerVisible.slice();
     state.activeColor=palette.length>1?1:0;
     state.projectName=a.fileName.replace(/\.png$/i,"");
     finishProjectStateChange();
@@ -2460,13 +2469,17 @@ $("#pngReduceDo").onclick=()=>{
 };
 
 $("#resizeBtn").onclick=()=>{
-  const w=Math.max(4,Math.min(64,+$("#wInput").value||16)),h=Math.max(4,Math.min(64,+$("#hInput").value||16));
+  const w=Math.max(4,Math.min(64,+$("#wInput").value||16)),h=Math.max(4,Math.min(64,+$("#newCanvasHeight").value||16));
   pushUndo();
   state.width=w;
   state.height=h;
-  state.palette=DEFAULT.palette.slice();
+  const preset=PALETTE_PRESETS[$("#newCanvasPalette").value] || PALETTE_PRESETS[0];
+  state.palette=["transparent",...preset.colors];
   state.frames=[makeFrame(w,h)];
   state.activeFrame=0;
+  state.activeLayer=DEFAULT.activeLayer;
+  state.activeColor=DEFAULT.activeColor;
+  state.layerVisible=DEFAULT.layerVisible.slice();
   state.loopStart=null;
   state.loopEnd=null;
   state.projectName="untitled";

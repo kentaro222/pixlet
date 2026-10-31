@@ -141,6 +141,91 @@ class BrowserTests(unittest.TestCase):
                 self.page.locator('#redoBtn').click()
                 self.assertEqual(self.saved(), drawn)
 
+    def test_new_canvas_preset_selection_persists_and_undo_restores_work(self):
+        original = project()
+        original.update(activeLayer=0, activeColor=6, layerVisible=[True, False, False])
+        original['frames'][0]['layers'][0][0] = 5
+        palettes = [original['palette'], ['transparent', '#000000', '#2B2B2B', '#555555',
+                                        '#808080', '#AAAAAA', '#D4D4D4', '#FFFFFF']]
+        for index, palette in enumerate(palettes):
+            with self.subTest(preset=index):
+                self.import_project(original)
+                before = self.saved()
+                self.page.locator('#menuBtn').click()
+                self.page.locator('#newCanvasBtn').click()
+                self.assertEqual(self.page.locator('#newCanvasPalette option').all_text_contents(),
+                                 ['標準カラー', 'グレースケール'])
+                self.page.locator('#newCanvasPalette').select_option(str(index))
+                self.page.locator('#wInput').fill('8')
+                self.page.locator('#newCanvasHeight').fill('12')
+                self.page.locator('#resizeBtn').click()
+                created = self.saved()
+                self.assertEqual(created['palette'], palette)
+                self.assertEqual((created['width'], created['height']), (8, 12))
+                self.assertEqual(created['frames'], [{'layers': [[0] * 96 for _ in range(3)]}])
+                self.assertEqual(created['activeLayer'], 1)
+                self.assertEqual(created['layerVisible'], [True] * 3)
+                self.page.locator('#undoBtn').click()
+                self.assertEqual(self.saved(), before)
+                self.page.locator('#redoBtn').click()
+                self.assertEqual(self.saved(), created)
+                self.page.reload()
+                self.assertEqual(self.saved(), created)
+        self.page.locator('#menuBtn').click()
+        self.page.locator('#newCanvasBtn').click()
+        self.assertEqual(self.page.locator('#newCanvasPalette').input_value(), '0')
+        self.page.locator('#newCanvasPalette').select_option('1')
+        self.page.locator('#newCanvasSheet .closeSheet').click()
+        self.assertEqual(self.saved(), created)
+
+    def test_png_import_targets_visible_main_including_color_reduction(self):
+        original = project()
+        original.update(activeLayer=0, layerVisible=[True, False, True])
+        original['frames'][0]['layers'][0][0] = 5
+        for color_count in [2, 8]:
+            with self.subTest(colors=color_count):
+                self.import_project(original)
+                before = self.saved()
+                png = self.page.evaluate('''count => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 32; canvas.height = 16;
+                    const ctx = canvas.getContext('2d');
+                    for (let x = 0; x < count; x++) {
+                        ctx.fillStyle = `rgb(${x * 30}, ${255 - x * 30}, 80)`;
+                        ctx.fillRect(x, 0, 1, 1);
+                    }
+                    ctx.fillRect(16, 0, 1, 1);
+                    return canvas.toDataURL('image/png').split(',')[1];
+                }''', color_count)
+                self.page.locator('#menuBtn').click()
+                self.page.locator('#importPngBtn').click()
+                self.page.locator('#pngFile').set_input_files({
+                    'name': 'sprite.png', 'mimeType': 'image/png',
+                    'buffer': base64.b64decode(png)})
+                self.page.wait_for_function("document.querySelector('#pngInfo').textContent.includes('推定:')")
+                self.page.locator('#pngImportDo').click()
+                if color_count > 7:
+                    self.page.locator('#pngReduceDo').click()
+                imported = self.saved()
+                self.assertEqual((imported['width'], imported['height']), (16, 16))
+                self.assertEqual(len(imported['frames']), 2)
+                self.assertEqual(imported['activeLayer'], 1)
+                self.assertTrue(imported['layerVisible'][1])
+                self.assertEqual(self.page.locator('.layer.active').get_attribute('data-layer'), '1')
+                for index, frame in enumerate(imported['frames']):
+                    self.assertEqual(frame['layers'][0], [0] * 256)
+                    self.assertEqual(frame['layers'][2], [0] * 256)
+                    self.assertEqual(sum(value != 0 for value in frame['layers'][1]),
+                                     color_count if index == 0 else 1)
+                    self.assertTrue(all(0 <= value <= 7 for value in frame['layers'][1]))
+                self.page.locator('#undoBtn').click()
+                self.assertEqual(self.saved(), before)
+                self.page.locator('#redoBtn').click()
+                self.assertEqual(self.saved(), imported)
+                self.page.reload()
+                self.assertEqual(self.saved(), imported)
+                self.assertEqual(self.page.locator('.layer.active').get_attribute('data-layer'), '1')
+
     def test_picker_and_long_press_ignore_hidden_layers(self):
         data = project()
         data['frames'][0]['layers'][1][136] = 1
