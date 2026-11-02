@@ -819,6 +819,12 @@ async function copyPalette(palette){
   }
   toast(copied?"パレットテキストをコピーしました":"コピーできませんでした");
 }
+function selectPaletteSwapColor(slot){
+  if(!Number.isInteger(slot) || slot<1 || slot>7)return;
+  if(paletteSwapSlots.includes(slot))paletteSwapSlots=paletteSwapSlots.filter(value=>value!==slot);
+  else paletteSwapSlots=paletteSwapSlots.length===2?[slot]:[...paletteSwapSlots,slot];
+  renderPaletteSwap();
+}
 function renderPaletteSwap(){
   const row=$("#paletteSwapColors");row.innerHTML="";
   for(let slot=1;slot<=7;slot++){
@@ -829,16 +835,12 @@ function renderPaletteSwap(){
     button.textContent=String(slot);
     button.title=`${slot}番${chosen===0?"（交換元）":chosen===1?"（交換先）":""}`;
     button.ariaPressed=chosen>=0?"true":"false";
-    button.onclick=()=>{
-      if(paletteSwapSlots.includes(slot))paletteSwapSlots=paletteSwapSlots.filter(value=>value!==slot);
-      else paletteSwapSlots=paletteSwapSlots.length===2?[slot]:[...paletteSwapSlots,slot];
-      renderPaletteSwap();
-    };
+    button.onclick=()=>selectPaletteSwapColor(slot);
     row.appendChild(button);
   }
   $("#paletteSwapInfo").textContent=paletteSwapSlots.length===2
     ? `${paletteSwapSlots[0]}番 ↔ ${paletteSwapSlots[1]}番`
-    : paletteSwapSlots.length===1?`${paletteSwapSlots[0]}番 → 交換先を選んでください`:"交換する2色を選んでください";
+    : paletteSwapSlots.length===1?`${paletteSwapSlots[0]}番 → 交換先を選んでください`:"色ボタンかキャンバスから2色を選んでください";
   $("#swapPaletteColors").disabled=paletteSwapSlots.length!==2;
 }
 function swapArtworkColors(){
@@ -1328,7 +1330,7 @@ function trimToSelection(){
   });
 }
 
-let pointers=new Map(), pinchStart=null;
+let pointers=new Map(), pinchStart=null, swapTap=null;
 let spaceHeld=false,mousePan=null;
 let canvasLongTimer=null, pendingPointer=null, longPressTriggered=false;
 const LONG_PRESS_MS=650, LONG_PRESS_MOVE_PX=10;
@@ -1403,7 +1405,11 @@ wrap.addEventListener("pointerdown",e=>{
     mousePan={id:e.pointerId,x:e.clientX,y:e.clientY};
     return;
   }
-  if($("#bottomControls").classList.contains("swapping"))return;
+  if($("#bottomControls").classList.contains("swapping")){
+    swapTap=e.isPrimary && e.button===0?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;
+    if(swapTap)wrap.setPointerCapture(e.pointerId);
+    return;
+  }
   if(playing)stopPlayback();
   wrap.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -1447,6 +1453,10 @@ wrap.addEventListener("pointermove",e=>{
     render();
     return;
   }
+  if($("#bottomControls").classList.contains("swapping")){
+    if(swapTap?.id===e.pointerId && Math.hypot(e.clientX-swapTap.x,e.clientY-swapTap.y)>TAP_MOVE_LIMIT)swapTap=null;
+    return;
+  }
   if(!pointers.has(e.pointerId))return;
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
 
@@ -1488,6 +1498,15 @@ wrap.addEventListener("pointermove",e=>{
 
 wrap.addEventListener("pointerup",e=>{
   if(mousePan?.id===e.pointerId){mousePan=null;return;}
+  if($("#bottomControls").classList.contains("swapping")){
+    const tap=swapTap;
+    swapTap=null;
+    if(tap?.id===e.pointerId && Math.hypot(e.clientX-tap.x,e.clientY-tap.y)<=TAP_MOVE_LIMIT){
+      const cell=screenToCell(e.clientX,e.clientY);
+      if(cell)selectPaletteSwapColor(getTopColor(cell.x,cell.y));
+    }
+    return;
+  }
   pointers.delete(e.pointerId);
 
   if(pointers.size<2)pinchStart=null;
@@ -1518,6 +1537,7 @@ wrap.addEventListener("pointerup",e=>{
 });
 
 wrap.addEventListener("pointercancel",e=>{
+  swapTap=null;
   if(mousePan?.id===e.pointerId){mousePan=null;return;}
   pointers.delete(e.pointerId);
   if(pointers.size<2)pinchStart=null;

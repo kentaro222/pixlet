@@ -271,6 +271,60 @@ class BrowserTests(unittest.TestCase):
                 self.page.reload()
                 self.assertEqual(self.saved(), swapped)
 
+    def test_canvas_taps_select_swap_colors_without_editing_artwork(self):
+        data = project()
+        data.update(activeLayer=0, activeColor=7, layerVisible=[True, True, False])
+        data['frames'][0]['layers'][1][68:72] = [1, 2, 3, 4]
+        data['frames'][0]['layers'][2][68:70] = [7, 6]
+        for touch in [False, True]:
+            with self.subTest(touch=touch):
+                self.context.close()
+                self.context = self.browser.new_context(
+                    viewport={'width': 390, 'height': 844}, has_touch=touch)
+                self.page = self.context.new_page()
+                self.page.on('pageerror', lambda error: self.errors.append(str(error)))
+                self.page.goto(self.url)
+                self.import_project(data)
+                before = self.saved()
+                self.page.locator('#menuBtn').click()
+                self.page.locator('#paletteManageBtn').click()
+                self.page.locator('#openPaletteSwap').click()
+                tap = self.page.touchscreen.tap if touch else self.page.mouse.click
+                tap(*self.xy(4, 4))
+                self.assertEqual(self.page.locator('.paletteSwapSlot.source').inner_text(), '1')
+                tap(*self.xy(5, 4))
+                self.assertEqual(self.page.locator('.paletteSwapSlot.target').inner_text(), '2')
+                self.assertFalse(self.page.locator('#swapPaletteColors').is_disabled())
+                tap(*self.xy(4, 4))
+                self.assertEqual(self.page.locator('.paletteSwapSlot.source').inner_text(), '2')
+                self.assertTrue(self.page.locator('#swapPaletteColors').is_disabled())
+                self.page.locator('.paletteSwapSlot').nth(2).click()
+                self.assertEqual(self.page.locator('.paletteSwapSlot.target').inner_text(), '3')
+                tap(*self.xy(7, 4))
+                self.assertEqual(self.page.locator('.paletteSwapSlot.source').inner_text(), '4')
+                self.assertEqual(self.page.locator('.paletteSwapSlot.target').count(), 0)
+                tap(*self.xy(15, 15))
+                canvas = self.page.locator('#view').bounding_box()
+                tap(canvas['x'] + 1, canvas['y'] + 1)
+                self.page.mouse.move(*self.xy(4, 4))
+                self.page.mouse.down()
+                self.page.mouse.move(*self.xy(5, 4))
+                self.page.mouse.up()
+                self.assertEqual(self.page.locator('.paletteSwapSlot.source').inner_text(), '4')
+                self.assertEqual(self.saved(), before)
+                tap(*self.xy(4, 4))
+                self.page.locator('#swapPaletteColors').click()
+                swapped = self.saved()
+                expected = copy.deepcopy(before['frames'])
+                expected[0]['layers'][1][68:72] = [4, 2, 3, 1]
+                self.assertEqual(swapped['frames'], expected)
+                self.assertEqual(swapped['activeLayer'], before['activeLayer'])
+                self.assertEqual(swapped['activeColor'], before['activeColor'])
+                self.page.locator('#swapUndo').click()
+                self.assertEqual(self.saved(), before)
+                self.page.locator('#swapRedo').click()
+                self.assertEqual(self.saved(), swapped)
+
     def test_new_canvas_preset_selection_persists_and_undo_restores_work(self):
         original = project()
         original.update(activeLayer=0, activeColor=6, layerVisible=[True, False, False])
