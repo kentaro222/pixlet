@@ -183,12 +183,12 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 <div id="shapeModeSheet" class="sheet">
   <h3>図形</h3>
   <div class="row">
-    <button id="shapeRect">□ 四角</button>
-    <button id="shapeEllipse">○ 丸</button>
+    <button id="shapeRectOutline" data-shape="rect" data-filled="false" aria-label="四角の枠">□</button>
+    <button id="shapeRectFilled" data-shape="rect" data-filled="true" aria-label="塗りつぶした四角">■</button>
   </div>
   <div class="row" style="margin-top:8px">
-    <button id="shapeOutline">枠のみ</button>
-    <button id="shapeFilled">塗りつぶし</button>
+    <button id="shapeEllipseOutline" data-shape="ellipse" data-filled="false" aria-label="丸の枠">○</button>
+    <button id="shapeEllipseFilled" data-shape="ellipse" data-filled="true" aria-label="塗りつぶした丸">●</button>
   </div>
   <button class="closeSheet" style="width:100%;margin-top:8px">決定</button>
 </div>
@@ -1685,10 +1685,10 @@ function syncPlaybackControls(){
 function syncToolControls(){
   $$(".tool").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));
   $("#shapeIcon").textContent=shapeKind==="ellipse"?(shapeFilled?"●":"○"):(shapeFilled?"■":"□");
-  [["shapeRect",shapeKind==="rect"],["shapeEllipse",shapeKind==="ellipse"],
-   ["shapeOutline",!shapeFilled],["shapeFilled",shapeFilled]].forEach(([id,active])=>{
-    $("#"+id).classList.toggle("active",active);
-    $("#"+id).setAttribute("aria-pressed",String(active));
+  $$("#shapeModeSheet [data-shape]").forEach(button=>{
+    const active=button.dataset.shape===shapeKind && (button.dataset.filled==="true")===shapeFilled;
+    button.classList.toggle("active",active);
+    button.setAttribute("aria-pressed",String(active));
   });
 }
 function syncGridButton(){
@@ -1986,10 +1986,11 @@ $("#shapeTool").onclick=()=>{
   setTool("shape");
   openSheet("#shapeModeSheet");
 };
-$("#shapeRect").onclick=()=>{shapeKind="rect";syncToolControls();};
-$("#shapeEllipse").onclick=()=>{shapeKind="ellipse";syncToolControls();};
-$("#shapeOutline").onclick=()=>{shapeFilled=false;syncToolControls();};
-$("#shapeFilled").onclick=()=>{shapeFilled=true;syncToolControls();};
+$$("#shapeModeSheet [data-shape]").forEach(button=>button.onclick=()=>{
+  shapeKind=button.dataset.shape;
+  shapeFilled=button.dataset.filled==="true";
+  syncToolControls();
+});
 $$(".layer").forEach(b=>{
   const li=+b.dataset.layer;
   registerDoubleTap(b,`layer-${li}`,()=>{

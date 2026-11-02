@@ -157,10 +157,11 @@ class BrowserTests(unittest.TestCase):
             with self.subTest(kind=kind, fill=fill, start=start, end=end):
                 self.import_project(project())
                 self.page.locator('#shapeTool').click()
-                self.page.locator('#shape' + kind).click()
-                self.page.locator('#shape' + fill).click()
-                self.assertEqual(self.page.locator('#shape' + kind).get_attribute('aria-pressed'), 'true')
-                self.assertEqual(self.page.locator('#shape' + fill).get_attribute('aria-pressed'), 'true')
+                self.assertEqual(self.page.locator('#shapeModeSheet [data-shape]').all_text_contents(),
+                                 ['□', '■', '○', '●'])
+                self.page.locator('#shape' + kind + fill).click()
+                self.assertEqual(self.page.locator('#shape' + kind + fill).get_attribute('aria-pressed'), 'true')
+                self.assertEqual(self.page.locator('#shapeModeSheet [aria-pressed="true"]').count(), 1)
                 self.page.locator('#shapeModeSheet .closeSheet').click()
                 self.assertEqual(self.page.locator('#shapeIcon').inner_text(), icon)
                 self.page.mouse.move(*self.xy(*start))
