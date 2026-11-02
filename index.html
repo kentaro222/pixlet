@@ -47,7 +47,8 @@ header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white
 .swatch span{position:absolute;right:5px;bottom:2px;font-size:10px;text-shadow:0 1px 2px #000}
 #tools{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .tool.active{outline:2px solid var(--accent);background:#2e3c54}
-#rectModeSheet button.active{outline:2px solid var(--accent)}
+#shapeModeSheet button.active{outline:2px solid var(--accent)}
+#selectionSize{position:absolute;top:8px;left:8px;padding:4px 8px;border-radius:6px;background:#000c;font-size:12px;pointer-events:none}
 #layers{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .layer.active{outline:2px solid var(--accent);background:#2e3c54}.layer{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #bottomControls{height:200px}
@@ -124,6 +125,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 
 <div id="canvasWrap">
   <canvas id="view"></canvas>
+  <div id="selectionSize" role="status" hidden></div>
   <div id="crosshair"></div>
 </div>
 
@@ -164,7 +166,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
   <button class="tool" data-tool="fill">▣<br><span class="small">塗り</span></button>
   <button class="tool" data-tool="select">▢<br><span class="small">選択</span></button>
   <button class="tool" data-tool="line">╱<br><span class="small">直線</span></button>
-  <button id="rectTool" class="tool" data-tool="rect"><span id="rectIcon">□</span><br><span class="small">四角形</span></button>
+  <button id="shapeTool" class="tool" data-tool="shape"><span id="shapeIcon">□</span><br><span class="small">図形</span></button>
   <button id="undoBtn" class="icon">↶</button>
   <button id="redoBtn" class="icon">↷</button>
 </div>
@@ -178,13 +180,17 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 </div>
 </div>
 
-<div id="rectModeSheet" class="sheet">
-  <h3>四角形</h3>
+<div id="shapeModeSheet" class="sheet">
+  <h3>図形</h3>
   <div class="row">
-    <button id="rectOutline">□ 枠線</button>
-    <button id="rectFilled">■ 塗りつぶし</button>
+    <button id="shapeRect">□ 四角</button>
+    <button id="shapeEllipse">○ 丸</button>
   </div>
-  <button class="closeSheet" style="width:100%;margin-top:8px">キャンセル</button>
+  <div class="row" style="margin-top:8px">
+    <button id="shapeOutline">枠のみ</button>
+    <button id="shapeFilled">塗りつぶし</button>
+  </div>
+  <button class="closeSheet" style="width:100%;margin-top:8px">決定</button>
 </div>
 
 <div id="projectNameSheet" class="sheet">
@@ -496,7 +502,7 @@ let tool="pen", zoom=1, offsetX=0, offsetY=0, drawing=false, lastCell=null, sele
 let undo=[], redo=[], selection=null, selectStart=null, selectionClipboard=null, playing=false, playTimer=null;
 let editingColorIndex=-1;
 let onion=false;
-let rectFilled=false;
+let shapeKind="rect",shapeFilled=false;
 let gridVisible=loadGridVisible();
 let centerLineVisible=loadCenterLineVisible();
 let myPalettes=loadMyPalettes();
@@ -1046,7 +1052,16 @@ function forEachShapeCell(shape,visit){
   } else {
     const left=Math.min(start.x,end.x),right=Math.max(start.x,end.x);
     const top=Math.min(start.y,end.y),bottom=Math.max(start.y,end.y);
-    if(shape.filled){
+    if(shape.kind==="ellipse"){
+      const cx=(left+right)/2,cy=(top+bottom)/2;
+      const rx=(right-left+1)/2,ry=(bottom-top+1)/2;
+      const inside=(x,y)=>x>=left && x<=right && y>=top && y<=bottom &&
+        ((x-cx)/rx)**2+((y-cy)/ry)**2<=1;
+      for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){
+        if(inside(x,y) && (shape.filled ||
+           !inside(x-1,y) || !inside(x+1,y) || !inside(x,y-1) || !inside(x,y+1)))visit(x,y);
+      }
+    }else if(shape.filled){
       for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++)visit(x,y);
     }else{
       for(let x=left;x<=right;x++){visit(x,top);if(bottom!==top)visit(x,bottom)}
@@ -1124,7 +1139,7 @@ function beginAction(cell){
   if(tool==="pen"){pushUndo();drawing=true;setPixel(cell.x,cell.y,state.activeColor);lastCell=cell;}
   else if(tool==="pick"){state.activeColor=getTopColor(cell.x,cell.y);syncUI();}
   else if(tool==="fill"){pushUndo();flood(cell.x,cell.y,state.activeColor);saveLocal();}
-  else if(tool==="line" || tool==="rect")shapeDraft={tool,start:cell,end:cell,filled:tool==="rect" && rectFilled};
+  else if(tool==="line" || tool==="shape")shapeDraft={tool,start:cell,end:cell,kind:shapeKind,filled:tool==="shape" && shapeFilled};
   else if(tool==="select"){
     if(selection){
       if(cellInSelection(cell)){
@@ -1669,7 +1684,12 @@ function syncPlaybackControls(){
 }
 function syncToolControls(){
   $$(".tool").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));
-  $("#rectIcon").textContent=rectFilled?"■":"□";
+  $("#shapeIcon").textContent=shapeKind==="ellipse"?(shapeFilled?"●":"○"):(shapeFilled?"■":"□");
+  [["shapeRect",shapeKind==="rect"],["shapeEllipse",shapeKind==="ellipse"],
+   ["shapeOutline",!shapeFilled],["shapeFilled",shapeFilled]].forEach(([id,active])=>{
+    $("#"+id).classList.toggle("active",active);
+    $("#"+id).setAttribute("aria-pressed",String(active));
+  });
 }
 function syncGridButton(){
   $("#gridBtn").textContent=`グリッド線: ${gridVisible?"ON":"OFF"}`;
@@ -1679,6 +1699,8 @@ function syncCenterLineButton(){
 }
 function syncSelectionControls(){
   const bar=$("#selbar"),visible=tool==="select";
+  $("#selectionSize").hidden=!selection;
+  $("#selectionSize").textContent=selection?`選択: ${selection.w} × ${selection.h} px`:"";
   ["flipSel","copySel","cutSel","trimSel","clearSel"].forEach(id=>$("#"+id).disabled=!selection);
   ["moveSelLeft","moveSelUp","moveSelDown","moveSelRight"].forEach(id=>$("#"+id).disabled=!selection);
   $("#clearSel").hidden=!selection;
@@ -1947,7 +1969,7 @@ $("#importPaletteText").onclick=()=>{
 };
 
 $$(".tool").forEach(b=>{
-  if(b.dataset.tool!=="rect")b.onclick=()=>setTool(b.dataset.tool);
+  if(b.dataset.tool!=="shape")b.onclick=()=>setTool(b.dataset.tool);
 });
 function finishSelectionTool(){
   // Keep copied pixels, but discard the selection buffer and all pending selection input.
@@ -1960,21 +1982,14 @@ function setTool(nextTool){
   tool=nextTool;
   syncUI();
 }
-function selectRectMode(filled){
-  rectFilled=filled;
-  setTool("rect");
-  closeSheets();
-}
-const rectButton=$("#rectTool");
-registerDoubleTap(rectButton,"rect",()=>{
-  setTool("rect");
-},()=>{
-  $("#rectOutline").classList.toggle("active",!rectFilled);
-  $("#rectFilled").classList.toggle("active",rectFilled);
-  openSheet("#rectModeSheet");
-});
-$("#rectOutline").onclick=()=>selectRectMode(false);
-$("#rectFilled").onclick=()=>selectRectMode(true);
+$("#shapeTool").onclick=()=>{
+  setTool("shape");
+  openSheet("#shapeModeSheet");
+};
+$("#shapeRect").onclick=()=>{shapeKind="rect";syncToolControls();};
+$("#shapeEllipse").onclick=()=>{shapeKind="ellipse";syncToolControls();};
+$("#shapeOutline").onclick=()=>{shapeFilled=false;syncToolControls();};
+$("#shapeFilled").onclick=()=>{shapeFilled=true;syncToolControls();};
 $$(".layer").forEach(b=>{
   const li=+b.dataset.layer;
   registerDoubleTap(b,`layer-${li}`,()=>{

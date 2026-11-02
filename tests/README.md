@@ -18,4 +18,6 @@ color picking with hidden layers, new-canvas palette selection, and PNG import
 into a visible MAIN layer (including automatic color reduction). They do not
 change browser user profiles. Tests also cover selecting a layer when revealing
 it and swapping artwork colors with an unobscured canvas at desktop and mobile
-sizes, including undo/redo.
+sizes, including undo/redo. Shape tests cover outlined and filled rectangles and
+ellipses, reverse drags, single-pixel shapes, and undo/redo. Selection tests check
+live pixel dimensions during drawing, moving, copying, and clearing selections.

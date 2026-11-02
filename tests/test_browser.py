@@ -141,6 +141,67 @@ class BrowserTests(unittest.TestCase):
                 self.page.locator('#redoBtn').click()
                 self.assertEqual(self.saved(), drawn)
 
+    def test_shape_modes_preview_geometry_and_undo_redo(self):
+        square = {(x, y) for y in range(4, 9) for x in range(4, 9)}
+        square_outline = {(x, y) for x, y in square if x in (4, 8) or y in (4, 8)}
+        circle = square - {(4, 4), (8, 4), (4, 8), (8, 8)}
+        circle_outline = ({(x, y) for x in (5, 6, 7) for y in (4, 8)} |
+                          {(x, y) for x in (4, 8) for y in (5, 6, 7)})
+        cases = [('Rect', 'Outline', (4, 4), (8, 8), square_outline, '□'),
+                 ('Rect', 'Filled', (8, 8), (4, 4), square, '■'),
+                 ('Ellipse', 'Outline', (8, 8), (4, 4), circle_outline, '○'),
+                 ('Ellipse', 'Filled', (4, 4), (8, 8), circle, '●'),
+                 ('Ellipse', 'Outline', (4, 4), (4, 8), {(4, y) for y in range(4, 9)}, '○'),
+                 ('Ellipse', 'Filled', (4, 4), (4, 4), {(4, 4)}, '●')]
+        for kind, fill, start, end, expected, icon in cases:
+            with self.subTest(kind=kind, fill=fill, start=start, end=end):
+                self.import_project(project())
+                self.page.locator('#shapeTool').click()
+                self.page.locator('#shape' + kind).click()
+                self.page.locator('#shape' + fill).click()
+                self.assertEqual(self.page.locator('#shape' + kind).get_attribute('aria-pressed'), 'true')
+                self.assertEqual(self.page.locator('#shape' + fill).get_attribute('aria-pressed'), 'true')
+                self.page.locator('#shapeModeSheet .closeSheet').click()
+                self.assertEqual(self.page.locator('#shapeIcon').inner_text(), icon)
+                self.page.mouse.move(*self.xy(*start))
+                self.page.mouse.down()
+                self.page.mouse.move(*self.xy(*end))
+                self.assertEqual(self.saved()['frames'], project()['frames'])
+                self.page.mouse.up()
+                drawn = self.saved()
+                layer = drawn['frames'][0]['layers'][1]
+                self.assertEqual({(i % 16, i // 16) for i, value in enumerate(layer) if value}, expected)
+                self.page.locator('#undoBtn').click()
+                self.assertEqual(self.saved()['frames'], project()['frames'])
+                self.page.locator('#redoBtn').click()
+                self.assertEqual(self.saved(), drawn)
+
+    def test_selection_dimensions_follow_drag_move_copy_and_clear(self):
+        self.import_project(project())
+        self.page.locator('[data-tool="select"]').click()
+        size = self.page.locator('#selectionSize')
+        self.assertTrue(size.is_hidden())
+        for start, end, label in [((3, 4), (7, 6), '選択: 5 × 3 px'),
+                                  ((10, 12), (7, 8), '選択: 4 × 5 px')]:
+            self.page.mouse.move(*self.xy(*start))
+            self.page.mouse.down()
+            self.page.mouse.move(*self.xy(*end))
+            self.assertEqual(size.inner_text(), label)
+            self.page.mouse.up()
+            self.assertTrue(size.is_visible())
+            self.assertEqual(size.inner_text(), label)
+            self.page.locator('#moveSelRight').click()
+            self.assertEqual(size.inner_text(), label)
+            self.page.locator('#copySel').click()
+            self.page.locator('#pasteSel').click()
+            self.assertEqual(size.inner_text(), label)
+            self.page.locator('#clearSel').click()
+            self.assertTrue(size.is_hidden())
+        self.page.mouse.click(*self.xy(5, 5))
+        self.assertEqual(size.inner_text(), '選択: 1 × 1 px')
+        self.page.locator('#addFrame').click()
+        self.assertTrue(size.is_hidden())
+
     def test_showing_layer_selects_it_and_last_visible_layer_stays_visible(self):
         data = project()
         data.update(activeLayer=0, layerVisible=[True, False, False])
