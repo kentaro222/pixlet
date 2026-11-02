@@ -52,6 +52,11 @@ header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white
 .layer.active{outline:2px solid var(--accent);background:#2e3c54}.layer{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #bottomControls{height:200px}
 #normalControls{display:flex;flex-direction:column;gap:7px}
+#paletteSwapControls{display:none;flex-direction:column;gap:7px;height:100%;justify-content:center}
+#paletteSwapControls h3,#paletteSwapControls p{margin:0}
+#paletteSwapControls h3{font-size:16px}
+#bottomControls.swapping #normalControls,#bottomControls.swapping #selbar{display:none}
+#bottomControls.swapping #paletteSwapControls{display:flex}
 #bottomControls.selecting #normalControls{display:none}
 .sheet{position:fixed;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:20;background:var(--panel);border-radius:18px;padding:14px;box-shadow:0 12px 60px #0008;display:none;max-height:78dvh;overflow:auto}
 .sheet.open{display:block}
@@ -70,6 +75,7 @@ header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white
 .paletteSwapSlot{min-width:0;text-shadow:0 1px 2px #000;color:#fff;border:2px solid #ffffff33}
 .paletteSwapSlot.source{outline:2px solid var(--accent);outline-offset:-2px}
 .paletteSwapSlot.target{outline:2px solid var(--danger);outline-offset:-2px}
+#swapPaletteColors{flex:2}
 #swapPaletteColors:disabled{opacity:.45}
 #colorPicker{width:100%;height:56px;border:0;background:none}
 #framesGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
@@ -122,6 +128,17 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 </div>
 
 <div id="bottomControls">
+<div id="paletteSwapControls">
+  <h3>作品の色を入れ替え</h3>
+  <div id="paletteSwapColors"></div>
+  <p id="paletteSwapInfo" class="small"></p>
+  <div class="row">
+    <button id="swapPaletteColors" disabled>入れ替える</button>
+    <button id="swapUndo" aria-label="色の入れ替えを取り消す">↶</button>
+    <button id="swapRedo" aria-label="色の入れ替えをやり直す">↷</button>
+    <button id="closePaletteSwap">閉じる</button>
+  </div>
+</div>
 <div id="selbar" class="selbar">
   <button id="flipSel">↔</button>
   <button id="copySel">複製</button>
@@ -264,11 +281,8 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
 
 <div id="paletteManageSheet" class="sheet">
   <h3>パレット管理</h3>
-  <h4>作品の色を入れ替え</h4>
   <p class="small">パレットの位置は変えず、全フレーム・全レイヤーの作品内の2色を入れ替えます。</p>
-  <div id="paletteSwapColors"></div>
-  <p id="paletteSwapInfo" class="small"></p>
-  <button id="swapPaletteColors" style="width:100%" disabled>入れ替える</button>
+  <button id="openPaletteSwap" style="width:100%">作品の色を入れ替え</button>
   <h4>標準パレット</h4>
   <div id="palettePresets"></div>
   <h4>マイパレット <span id="myPaletteCount" class="small"></span></h4>
@@ -887,6 +901,14 @@ function openPaletteManagement(){
   renderPaletteManagement();
   openSheet("#paletteManageSheet");
 }
+function openPaletteSwap(){
+  stopPlayback();
+  closeSheets();
+  paletteSwapSlots=[];
+  renderPaletteSwap();
+  $("#bottomControls").classList.add("swapping");
+  render();
+}
 
 function resizeCanvasViewport(){
   const r=wrap.getBoundingClientRect();
@@ -1366,6 +1388,7 @@ wrap.addEventListener("pointerdown",e=>{
     mousePan={id:e.pointerId,x:e.clientX,y:e.clientY};
     return;
   }
+  if($("#bottomControls").classList.contains("swapping"))return;
   if(playing)stopPlayback();
   wrap.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -1844,7 +1867,11 @@ $("#colorApply").onclick=()=>{
   closeSheets();
 };
 
-function openSheet(id){closeSheets();$(id).classList.add("open")}
+function openSheet(id){
+  closeSheets();
+  $("#bottomControls").classList.remove("swapping");
+  $(id).classList.add("open");
+}
 function closeSheets(){$$(".sheet").forEach(s=>s.classList.remove("open"))}
 function openProjectNameSheet(){
   $("#projectNameInput").value=state.projectName;
@@ -1903,6 +1930,13 @@ $$(".canvasShrinkButton").forEach(button=>button.onclick=()=>shrinkArtwork(Numbe
 $("#outlineBtn").onclick=outlineActiveLayer;
 $("#saveMyPalette").onclick=addMyPalette;
 $("#swapPaletteColors").onclick=swapArtworkColors;
+$("#openPaletteSwap").onclick=openPaletteSwap;
+$("#closePaletteSwap").onclick=()=>{
+  $("#bottomControls").classList.remove("swapping");
+  render();
+};
+$("#swapUndo").onclick=()=>$("#undoBtn").click();
+$("#swapRedo").onclick=()=>$("#redoBtn").click();
 $("#paletteConfirmCancel").onclick=openPaletteManagement;
 $("#paletteNameCancel").onclick=openPaletteManagement;
 $("#importPaletteText").onclick=()=>{
@@ -1967,6 +2001,7 @@ $$(".layer").forEach(b=>{
     }
 
     state.layerVisible[li]=willShow;
+    if(willShow)state.activeLayer=li;
     navigator.vibrate?.(20);
     saveLocal();
     syncUI();

@@ -16,4 +16,6 @@ browser contexts. They cover invalid project rejection without overwriting work,
 v2 project roundtrips, index recovery, continuous pen strokes with undo/redo, and
 color picking with hidden layers, new-canvas palette selection, and PNG import
 into a visible MAIN layer (including automatic color reduction). They do not
-change browser user profiles.
+change browser user profiles. Tests also cover selecting a layer when revealing
+it and swapping artwork colors with an unobscured canvas at desktop and mobile
+sizes, including undo/redo.

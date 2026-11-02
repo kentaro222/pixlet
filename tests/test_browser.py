@@ -141,6 +141,74 @@ class BrowserTests(unittest.TestCase):
                 self.page.locator('#redoBtn').click()
                 self.assertEqual(self.saved(), drawn)
 
+    def test_showing_layer_selects_it_and_last_visible_layer_stays_visible(self):
+        data = project()
+        data.update(activeLayer=0, layerVisible=[True, False, False])
+        self.import_project(data)
+        main = self.page.locator('.layer[data-layer="1"]')
+        main.dblclick(delay=80)
+        self.assertTrue(self.saved()['layerVisible'][1])
+        self.assertEqual(self.saved()['activeLayer'], 1)
+        self.assertEqual(self.page.locator('.layer.active').get_attribute('data-layer'), '1')
+        self.page.reload()
+        self.assertEqual(self.page.locator('.layer.active').get_attribute('data-layer'), '1')
+        main.dblclick(delay=80)
+        self.assertFalse(self.saved()['layerVisible'][1])
+        self.assertEqual(self.saved()['activeLayer'], 0)
+        self.page.locator('.layer[data-layer="0"]').dblclick(delay=80)
+        self.assertEqual(self.saved()['layerVisible'], [True, False, False])
+        self.assertEqual(self.saved()['activeLayer'], 0)
+
+    def test_color_swap_keeps_canvas_visible_and_supports_undo_redo(self):
+        data = project()
+        data['frames'].append(copy.deepcopy(data['frames'][0]))
+        for frame in data['frames']:
+            for layer in frame['layers']:
+                layer[0:3] = [1, 2, 3]
+        expected = copy.deepcopy(data['frames'])
+        for frame in expected:
+            for layer in frame['layers']:
+                layer[0:3] = [2, 1, 3]
+        for viewport in [{'width': 1280, 'height': 900}, {'width': 390, 'height': 844},
+                         {'width': 320, 'height': 568}]:
+            with self.subTest(viewport=viewport):
+                self.page.set_viewport_size(viewport)
+                self.import_project(data)
+                before = self.saved()
+                canvas_before = self.page.locator('#view').bounding_box()
+                self.page.locator('#menuBtn').click()
+                self.page.locator('#paletteManageBtn').click()
+                self.page.locator('#openPaletteSwap').click()
+                self.assertEqual(self.page.locator('.sheet.open').count(), 0)
+                canvas = self.page.locator('#view').bounding_box()
+                panel = self.page.locator('#paletteSwapControls').bounding_box()
+                self.assertEqual(canvas, canvas_before)
+                self.assertGreater(canvas['height'], 0)
+                self.assertGreaterEqual(panel['y'], canvas['y'] + canvas['height'])
+                close = self.page.locator('#closePaletteSwap').bounding_box()
+                self.assertLessEqual(close['y'] + close['height'], viewport['height'])
+                # Viewing the artwork must not accidentally paint while choosing colors.
+                self.page.mouse.click(canvas['x'] + canvas['width']/2,
+                                      canvas['y'] + canvas['height']/2)
+                self.assertEqual(self.saved(), before)
+                self.assertTrue(self.page.locator('#swapPaletteColors').is_disabled())
+                self.page.locator('.paletteSwapSlot').nth(0).click()
+                self.assertTrue(self.page.locator('#swapPaletteColors').is_disabled())
+                self.page.locator('.paletteSwapSlot').nth(1).click()
+                self.page.locator('#swapPaletteColors').click()
+                swapped = self.saved()
+                self.assertEqual(swapped['frames'], expected)
+                self.assertEqual(swapped['palette'], before['palette'])
+                self.assertTrue(self.page.locator('#paletteSwapControls').is_visible())
+                self.page.locator('#swapUndo').click()
+                self.assertEqual(self.saved(), before)
+                self.page.locator('#swapRedo').click()
+                self.assertEqual(self.saved(), swapped)
+                self.page.locator('#closePaletteSwap').click()
+                self.assertTrue(self.page.locator('#normalControls').is_visible())
+                self.page.reload()
+                self.assertEqual(self.saved(), swapped)
+
     def test_new_canvas_preset_selection_persists_and_undo_restores_work(self):
         original = project()
         original.update(activeLayer=0, activeColor=6, layerVisible=[True, False, False])
