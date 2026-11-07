@@ -11,6 +11,7 @@
 header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:var(--panel);flex-wrap:wrap}
 h1{font-size:17px;margin:0;font-weight:650}button,.file-label,select{background:#343b4c;border:1px solid #4a5469;color:inherit;border-radius:9px;padding:10px 12px;font:inherit;cursor:pointer}button:disabled{opacity:.4}.file-label{background:#2868a7;border-color:#367dbf;font-weight:650}input[type=file]{display:none}
 .toolbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:9px 12px;background:#202531;border-bottom:1px solid #3b4252}.toolbar button{padding:8px 11px}.toolbar .current{color:var(--muted);font-size:13px;margin:0 5px;max-width:36vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.spacer{flex:1}
+.background-color{display:flex;align-items:center;gap:6px;font-size:13px}.background-color input[type=color]{width:36px;height:36px;padding:2px;border:1px solid #4a5469;border-radius:7px;background:#343b4c;cursor:pointer}.background-color input[type=text]{width:88px;min-width:0;padding:8px 6px;border:1px solid #4a5469;border-radius:7px;background:#171a21;color:inherit;font:13px ui-monospace,monospace}.background-color input[aria-invalid=true]{border-color:#ff8a8a}
 #stage{flex:1;min-height:120px;position:relative;overflow:hidden;touch-action:none;cursor:grab;background:#181b22}#stage.dragging{cursor:grabbing}canvas{display:block;width:100%;height:100%;image-rendering:pixelated}#hint{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none;color:#bfc7d6;line-height:1.9;padding:24px}#hint[hidden]{display:none}
 #strip{height:104px;display:flex;gap:8px;padding:9px;overflow-x:auto;overflow-y:hidden;background:var(--panel);border-top:1px solid #3b4252;scrollbar-width:thin;flex-shrink:0}.thumb{min-width:78px;width:78px;padding:4px 3px;border:2px solid transparent;border-radius:8px;background:#303747;display:flex;flex-direction:column;align-items:center;gap:3px}.thumb.active{border-color:var(--accent)}.thumb canvas{height:57px;width:68px;object-fit:contain;background:#151a23}.thumb span{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:70px;text-align:center}
 footer{padding:7px 12px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:10px;background:var(--panel)}@media(max-width:530px){header{padding:9px 10px}h1{font-size:15px}.toolbar{padding:7px;gap:5px}.toolbar button,.toolbar select{padding:8px;font-size:13px}#strip{height:92px}.thumb{min-width:70px;width:70px}.thumb canvas{height:47px;width:60px}.thumb span{width:60px}footer{font-size:11px}}
@@ -22,7 +23,8 @@ footer{padding:7px 12px;color:var(--muted);font-size:12px;display:flex;justify-c
 <button id="prev" aria-label="前の画像">◀</button><button id="next" aria-label="次の画像">▶</button><span class="current" id="name">画像なし</span>
 <div class="spacer"></div>
 <button id="minus" aria-label="縮小">－</button><button id="fit">画面に合わせる</button><button id="plus" aria-label="拡大">＋</button>
-<select id="background" aria-label="背景"><option value="checker">市松模様</option><option value="dark">黒背景</option><option value="white">白背景</option></select>
+<select id="background" aria-label="背景"><option value="checker">市松模様</option><option value="dark">黒背景</option><option value="white">白背景</option><option value="custom">カスタム</option></select>
+<div class="background-color"><label for="backgroundColor">背景色</label><input id="backgroundColor" type="color" value="#12141a" aria-label="背景色を選択"><input id="backgroundHex" type="text" value="#12141a" aria-label="背景色のカラーコード" aria-describedby="backgroundHexHelp" maxlength="7" spellcheck="false" autocapitalize="off"><span id="backgroundHexHelp" hidden>#と6桁の16進数、または3桁の省略形で指定してください。</span></div>
 </div>
 <div id="stage"><canvas id="view"></canvas><div id="hint">PNGをまとめて選択してください。<br>ピンチで拡大・縮小、ドラッグで移動できます。</div></div>
 <div id="strip" aria-label="画像一覧"></div>
@@ -30,12 +32,22 @@ footer{padding:7px 12px;color:var(--muted);font-size:12px;display:flex;justify-c
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id),stage=$('stage'),view=$('view'),ctx=view.getContext('2d',{alpha:false}),strip=$('strip');
-let items=[],index=-1,scale=1,offX=0,offY=0,fitMode=true,background='checker';
+let items=[],index=-1,scale=1,offX=0,offY=0,fitMode=true,background='checker',customColor='#12141a';
+const BACKGROUND_KEY='pixlet-viewer-background-v1';
+try{
+ const saved=JSON.parse(localStorage.getItem(BACKGROUND_KEY));
+ if(saved&&typeof saved==='object'){
+  if(['checker','dark','white','custom'].includes(saved.background))background=saved.background;
+  if(typeof saved.customColor==='string'&&/^#[0-9a-f]{6}$/i.test(saved.customColor))customColor=saved.customColor.toLowerCase();
+ }
+}catch(e){/* Storage may be unavailable or contain invalid data. Use defaults. */}
+$('background').value=background;$('backgroundColor').value=customColor;$('backgroundHex').value=customColor;
+function saveBackground(){try{localStorage.setItem(BACKGROUND_KEY,JSON.stringify({background,customColor}))}catch(e){/* Keep controls usable when storage is unavailable. */}}
 let pointers=new Map(),gesture=null,renderQueued=false;
 function current(){return items[index]||null}
 function resize(){const r=stage.getBoundingClientRect(),dpr=devicePixelRatio||1;view.width=Math.max(1,Math.round(r.width*dpr));view.height=Math.max(1,Math.round(r.height*dpr));if(fitMode&&current())fit();else draw()}
 function checker(){const s=12;for(let y=0;y<view.height;y+=s)for(let x=0;x<view.width;x+=s){ctx.fillStyle=((x/s+y/s)%2===0)?'#b4b4b4':'#e0e0e0';ctx.fillRect(x,y,s,s)}}
-function draw(){ctx.imageSmoothingEnabled=false;if(background==='checker')checker();else{ctx.fillStyle=background==='white'?'#ffffff':'#12141a';ctx.fillRect(0,0,view.width,view.height)}const item=current();if(!item)return;ctx.drawImage(item.img,Math.round(offX),Math.round(offY),item.img.naturalWidth*scale,item.img.naturalHeight*scale);$('scaleInfo').textContent='倍率 '+Number(scale.toFixed(2))+'×';$('info').textContent=items.length+'枚 · '+(index+1)+'/'+items.length+' · '+item.img.naturalWidth+'×'+item.img.naturalHeight+' px'}
+function draw(){ctx.imageSmoothingEnabled=false;if(background==='checker')checker();else{ctx.fillStyle=background==='custom'?customColor:background==='white'?'#ffffff':'#12141a';ctx.fillRect(0,0,view.width,view.height)}const item=current();if(!item)return;ctx.drawImage(item.img,Math.round(offX),Math.round(offY),item.img.naturalWidth*scale,item.img.naturalHeight*scale);$('scaleInfo').textContent='倍率 '+Number(scale.toFixed(2))+'×';$('info').textContent=items.length+'枚 · '+(index+1)+'/'+items.length+' · '+item.img.naturalWidth+'×'+item.img.naturalHeight+' px'}
 function schedule(){if(!renderQueued){renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;draw()})}}
 function fit(){const it=current();if(!it)return;const w=view.width,h=view.height,iW=it.img.naturalWidth,iH=it.img.naturalHeight;const available=Math.min(w/iW,h/iH)*.92;scale=Math.max(1,Math.floor(available));if(scale===1&&available<1)scale=available;offX=Math.round((w-iW*scale)/2);offY=Math.round((h-iH*scale)/2);fitMode=true;draw()}
 function zoom(factor,x=view.width/2,y=view.height/2){if(!current())return;const next=Math.min(128,Math.max(.05,scale*factor));offX=x-(x-offX)*next/scale;offY=y-(y-offY)*next/scale;scale=next;fitMode=false;schedule()}
@@ -43,8 +55,12 @@ function choose(i){if(i<0||i>=items.length)return;index=i;fit();$('name').textCo
 function thumbnail(item){let el=document.createElement('button');el.className='thumb';el.title=item.file.name;let c=document.createElement('canvas');c.width=136;c.height=114;let t=c.getContext('2d');t.imageSmoothingEnabled=false;t.fillStyle='#171a21';t.fillRect(0,0,136,114);let s=Math.min(136/item.img.width,114/item.img.height);s=s>=1?Math.floor(s):s;let w=item.img.width*s,h=item.img.height*s;t.drawImage(item.img,(136-w)/2,(114-h)/2,w,h);let label=document.createElement('span');label.textContent=item.file.name;el.append(c,label);return el}
 async function load(file){const url=URL.createObjectURL(file),img=new Image();try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});return{file,img,url}}catch(e){URL.revokeObjectURL(url);return null}}
 $('files').addEventListener('change',async e=>{const fs=[...e.target.files].filter(f=>f.type==='image/png'||/\.png$/i.test(f.name));if(!fs.length)return;$('name').textContent='読み込み中…';const loaded=(await Promise.all(fs.map(load))).filter(Boolean);if(!loaded.length){$('name').textContent='読み込みに失敗しました';return}for(const item of items)URL.revokeObjectURL(item.url);items=loaded;strip.replaceChildren();for(let j=0;j<items.length;j++){const el=thumbnail(items[j]);el.addEventListener('click',()=>choose(j));strip.append(el)}choose(0);e.target.value=''});
-$('prev').onclick=()=>choose(index-1);$('next').onclick=()=>choose(index+1);$('minus').onclick=()=>zoom(.5);$('plus').onclick=()=>zoom(2);$('fit').onclick=fit;$('background').onchange=e=>{background=e.target.value;draw()};$('prev').disabled=$('next').disabled=true;
-window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')choose(index-1);if(e.key==='ArrowRight')choose(index+1);if(e.key==='+'||e.key==='=')zoom(2);if(e.key==='-')zoom(.5);if(e.key==='0')fit()});
+$('prev').onclick=()=>choose(index-1);$('next').onclick=()=>choose(index+1);$('minus').onclick=()=>zoom(.5);$('plus').onclick=()=>zoom(2);$('fit').onclick=fit;$('background').onchange=e=>{background=e.target.value;saveBackground();draw()};$('prev').disabled=$('next').disabled=true;
+function setCustomColor(color){customColor=color;$('backgroundColor').value=color;$('backgroundHex').value=color;$('backgroundHex').removeAttribute('aria-invalid');background='custom';$('background').value=background;saveBackground();draw()}
+$('backgroundColor').addEventListener('input',e=>setCustomColor(e.target.value));
+$('backgroundHex').addEventListener('input',e=>{let value=e.target.value.trim();if(/^#?[0-9a-f]{3}$/i.test(value)){value='#'+value.replace('#','').split('').map(c=>c+c).join('')}else if(/^#?[0-9a-f]{6}$/i.test(value)){value='#'+value.replace('#','')}else{e.target.setAttribute('aria-invalid','true');return}const caret=e.target.selectionStart,raw=e.target.value;setCustomColor(value.toLowerCase());e.target.value=raw;e.target.setSelectionRange(caret,caret)});
+$('backgroundHex').addEventListener('blur',()=>{$('backgroundHex').value=customColor;$('backgroundHex').removeAttribute('aria-invalid')});
+window.addEventListener('keydown',e=>{if(e.target.closest('input,select,textarea,button')||e.target.isContentEditable)return;if(e.key==='ArrowLeft')choose(index-1);if(e.key==='ArrowRight')choose(index+1);if(e.key==='+'||e.key==='=')zoom(2);if(e.key==='-')zoom(.5);if(e.key==='0')fit()});
 function pos(e){const r=stage.getBoundingClientRect(),d=view.width/r.width;return{x:(e.clientX-r.left)*d,y:(e.clientY-r.top)*d}}
 function beginGesture(){const ps=[...pointers.values()];if(ps.length===2){const a=ps[0],b=ps[1];gesture={distance:Math.hypot(a.x-b.x,a.y-b.y),scale,mid:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},offX,offY}}else gesture=null}
 stage.addEventListener('pointerdown',e=>{if(!current())return;stage.setPointerCapture(e.pointerId);pointers.set(e.pointerId,pos(e));stage.classList.add('dragging');beginGesture()});
