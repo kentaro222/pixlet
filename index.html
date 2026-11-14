@@ -602,18 +602,21 @@ function pushUndo(){
   if(undo.length>40) undo.shift();
   redo.length=0;
 }
-function finishProjectStateChange(){
+function finishProjectStateChange(fitView=true){
   resetTransientEditState();
   saveLocal();
-  fitEntireCanvas();
+  if(fitView)fitEntireCanvas();
   syncUI();
 }
-function replaceProjectState(nextState){
+function replaceProjectState(nextState,fitView=true){
   state=nextState;
-  finishProjectStateChange();
+  finishProjectStateChange(fitView);
 }
 function restore(raw){
-  replaceProjectState(normalizeLoaded(JSON.parse(raw)));
+  const nextState=normalizeLoaded(JSON.parse(raw));
+  // Editing history must not reset a zoomed or panned view unless the canvas size changes.
+  const sizeChanged=nextState.width!==state.width || nextState.height!==state.height;
+  replaceProjectState(nextState,sizeChanged);
 }
 function toast(t){
   const el=$("#toast"); el.textContent=t; el.classList.add("show");

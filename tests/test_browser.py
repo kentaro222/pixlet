@@ -141,6 +141,41 @@ class BrowserTests(unittest.TestCase):
                 self.page.locator('#redoBtn').click()
                 self.assertEqual(self.saved(), drawn)
 
+    def test_undo_redo_preserve_zoom_and_pan(self):
+        for width, height in [(1280, 900), (390, 844)]:
+            with self.subTest(viewport=(width, height)):
+                self.page.set_viewport_size({'width': width, 'height': height})
+                data = project()
+                data['frames'][0]['layers'][0] = [2] * 256
+                self.import_project(data)
+                view = self.page.locator('#view')
+                fitted = view.screenshot()
+                box = view.bounding_box()
+                x, y = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2
+                self.page.mouse.move(x + 30, y + 20)
+                for _ in range(3):
+                    before = view.evaluate('(canvas) => canvas.toDataURL()')
+                    self.page.mouse.wheel(0, -100)
+                    self.page.wait_for_function(
+                        "before => document.querySelector('#view').toDataURL() !== before", arg=before)
+                self.page.mouse.down(button='middle')
+                self.page.mouse.move(x + 61, y + 39)
+                self.page.mouse.up(button='middle')
+                zoomed = view.screenshot()
+                self.assertNotEqual(zoomed, fitted)
+                self.page.mouse.click(x, y)
+                drawn = self.saved()
+                self.assertEqual(sum(bool(value) for value in drawn['frames'][0]['layers'][1]), 1)
+                painted = view.screenshot()
+                self.assertNotEqual(painted, zoomed)
+                for _ in range(2):
+                    self.page.locator('#undoBtn').click()
+                    self.assertEqual(self.saved()['frames'], data['frames'])
+                    self.assertEqual(view.screenshot(), zoomed)
+                    self.page.locator('#redoBtn').click()
+                    self.assertEqual(self.saved(), drawn)
+                    self.assertEqual(view.screenshot(), painted)
+
     def test_shape_modes_preview_geometry_and_undo_redo(self):
         square = {(x, y) for y in range(4, 9) for x in range(4, 9)}
         square_outline = {(x, y) for x, y in square if x in (4, 8) or y in (4, 8)}
