@@ -25,3 +25,5 @@ Color-swap tests exercise mouse and touch picking of visible canvas colors,
 mixed canvas/button selection, ignored transparent pixels and drags, and undo/redo.
 Viewport tests verify that undo/redo preserve canvas zoom and pan on desktop and
 mobile layouts while correctly restoring edited pixels.
+Viewer tests check that switching between short and long filenames keeps image
+frames, rendered pixels, and fit scales identical on mobile and desktop layouts.

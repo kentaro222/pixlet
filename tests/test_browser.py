@@ -80,6 +80,47 @@ class BrowserTests(unittest.TestCase):
         return (box['x'] + int((box['width'] - 16 * zoom) / 2) + (x + .5) * zoom,
                 box['y'] + int((box['height'] - 16 * zoom) / 2) + (y + .5) * zoom)
 
+    def test_viewer_filename_length_does_not_change_image_layout(self):
+        names = ['a.png', 'long_filename_' * 12 + '.png', '比較用の長いファイル名' * 12 + '.png']
+        for width, height in [(320, 640), (390, 844), (530, 700), (531, 700),
+                              (600, 700), (844, 390), (1280, 900)]:
+            with self.subTest(viewport=(width, height)):
+                self.page.set_viewport_size({'width': width, 'height': height})
+                self.page.goto(self.url + '/pixel-viewer/')
+                png = self.page.evaluate('''() => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 16; canvas.height = 64;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#d95757'; ctx.fillRect(0, 0, 16, 64);
+                    return canvas.toDataURL('image/png').split(',')[1];
+                }''')
+                self.page.locator('#files').set_input_files([
+                    {'name': name, 'mimeType': 'image/png', 'buffer': base64.b64decode(png)}
+                    for name in names])
+                self.page.wait_for_function("document.querySelector('#name').textContent === 'a.png'")
+
+                def layout():
+                    self.page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                    return self.page.evaluate('''() => ({
+                        boxes: ['.toolbar', '#stageArea', '#stage', '#view'].map(selector => {
+                            const r = document.querySelector(selector).getBoundingClientRect();
+                            return [r.x, r.y, r.width, r.height];
+                        }),
+                        scale: document.querySelector('#scaleInfo').textContent,
+                        pixels: document.querySelector('#view').toDataURL()
+                    })''')
+
+                expected = layout()
+                self.assertGreater(expected['boxes'][-1][3], 0)
+                self.assertGreater(self.page.locator('#name').bounding_box()['width'], 0)
+                for index in [1, 2, 0, 2, 1]:
+                    self.page.locator('.thumb').nth(index).click()
+                    self.assertEqual(self.page.locator('#name').inner_text(), names[index])
+                    self.assertEqual(self.page.locator('#name').get_attribute('title'), names[index])
+                    self.assertEqual(layout(), expected)
+                self.assertFalse(self.page.evaluate(
+                    'document.documentElement.scrollWidth > innerWidth'))
+
     def test_invalid_import_preserves_current_work(self):
         original = project()
         original['frames'][0]['layers'][1][0] = 4
