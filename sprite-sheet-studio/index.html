@@ -6,16 +6,33 @@
 <style>
 :root{color-scheme:dark;--bg:#10151e;--panel:#1d2635;--line:#3c4a60;--fg:#f3f6ff;--sub:#b5c0d2;--blue:#78a9ff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,-apple-system,"Noto Sans JP",sans-serif}button,input{font:inherit}button{min-height:42px;border:1px solid var(--line);border-radius:10px;background:#2a3850;color:var(--fg);padding:8px 12px;cursor:pointer}button:active{background:#456182}button:disabled{opacity:.4}button.primary{background:var(--blue);color:#101b32;border-color:var(--blue);font-weight:750}input[type=number]{background:#111b2a;border:1px solid var(--line);color:var(--fg);border-radius:9px;width:100%;min-width:0;min-height:43px;padding:8px}input[type=range],input[type=checkbox]{accent-color:var(--blue)}input[type=checkbox]{width:18px;height:18px;vertical-align:middle}main{max-width:1200px;margin:auto;padding:15px}.head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}h1{font-size:22px;margin:0}h2{font-size:15px;margin:0 0 12px}.muted{color:var(--sub);font-size:12px}.layout{display:grid;grid-template-columns:minmax(0,1fr) 315px;gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}.tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.tools button{flex:0 0 auto}.stage{height:420px;background:#262d3b;touch-action:none;border-radius:10px;overflow:hidden;margin:12px 0 8px;position:relative}.stage canvas{width:100%;height:100%;display:block;touch-action:none}.hint{font-size:12px;color:var(--sub);margin:8px 0}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:12px;color:var(--sub)}.drop{width:100%;border:2px dashed #637798;border-radius:11px;text-align:center;padding:18px 10px;min-height:65px;background:#202f48}.frames{display:flex;gap:8px;overflow-x:auto;padding:10px 0;scroll-snap-type:x proximity}.frame{flex:0 0 88px;min-width:88px;border:2px solid var(--line);border-radius:9px;padding:5px;background:#121c2a;cursor:pointer;scroll-snap-align:start}.frame.selected{border-color:#ffbf59}.frame img{display:block;width:100%;height:61px;object-fit:contain;image-rendering:pixelated;background:repeating-conic-gradient(#d7d7df 0 25%,#fff 0 50%) 0 0/14px 14px}.frame span{display:block;font-size:11px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:5px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1}.move button{flex:1;min-width:45px;font-size:20px}.full{width:100%}.secondary{padding:10px 0}.settingDetails summary{font-size:15px;font-weight:650;cursor:pointer;min-height:34px}.settingDetails[open] summary{margin-bottom:12px}.sectionlabel{color:var(--sub);font-size:12px;margin:11px 0 7px}#zoomRange{width:95px}#zoomLabel{min-width:44px;text-align:center;font-size:12px}.empty{border:1px dashed var(--line);padding:15px;text-align:center;border-radius:10px;color:var(--sub);font-size:12px}
 @media(max-width:760px){main{padding:10px 10px max(25px,env(safe-area-inset-bottom))}.head{position:relative;align-items:flex-start}h1{font-size:19px}.head .primary{min-height:44px;font-size:12px;white-space:nowrap}.layout{display:flex;flex-direction:column;gap:0}.card{padding:12px;margin-bottom:10px}.stage{height:min(46dvh,390px);min-height:240px;margin:9px 0}.toolbarZoom{display:grid;grid-template-columns:44px minmax(55px,1fr) 44px 50px 1fr;gap:5px}.toolbarZoom button{padding:5px}.toolbarZoom #zoomRange{width:100%}.toolbarZoom #fit{font-size:12px;padding:5px}.move{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.move button{min-width:0;padding:6px}.tools{gap:6px}.tools button{flex:1}.frames{margin-left:-2px;margin-right:-2px}.editorPanel{order:0}.framePanel{order:1}.settings{order:2}.settings .card{margin-bottom:10px}}
+#loadSheet{margin:8px 0}
+#sheetImport{width:min(440px,calc(100% - 24px));border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--fg);padding:16px}
+#sheetImport::backdrop{background:#0009}
 </style></head><body><main>
 <header class="head"><div><h1>Sprite Sheet Studio</h1><div class="muted">スマホ対応・画像配置エディター</div></div><button id="export" class="primary">PNG保存 ↓</button></header>
 <div class="layout"><div>
 <section class="card editorPanel"><div class="toolbarZoom tools"><button id="zoomOut">−</button><input id="zoomRange" aria-label="表示倍率" type="range" min="25" max="800" value="100" step="25"><button id="zoomIn">＋</button><span id="zoomLabel">100%</span><button id="fit">全体表示</button></div><div id="stage" class="stage"><canvas id="canvas"></canvas></div><div class="row"><span class="muted">タップで選択・ドラッグで位置調整</span><span id="sizeLabel" class="muted grow" style="text-align:right"></span></div><div class="sectionlabel">1pxずつ移動</div><div class="move tools"><button id="left" aria-label="左へ">←</button><button id="up" aria-label="上へ">↑</button><button id="down" aria-label="下へ">↓</button><button id="right" aria-label="右へ">→</button><button id="center">中央</button></div><div class="tools" style="margin-top:9px"><button id="grid" class="active">グリッド ON</button><button id="centerLines">中心線 OFF</button><button id="checker" class="active">透明背景 ON</button><button id="resetView">視点リセット</button></div></section>
-<section class="card framePanel"><h2>フレーム一覧</h2><button id="addImages" class="drop"><strong>＋ 画像を追加</strong><div class="muted">複数選択OK・ここにドロップも可能</div></button><input type="file" accept="image/*" multiple hidden id="files"><div id="frames" class="frames"></div><div id="empty" class="empty">画像はまだありません。上のボタンから追加してください。</div><div class="row secondary"><button id="sortAsc">名前順 ↑</button><button id="sortDesc">名前順 ↓</button><button id="addBlank">＋ 空コマ</button></div><div class="row"><button id="deleteFrame">選択コマ削除</button><button id="clear">すべて削除</button><span id="count" class="muted grow" style="text-align:right"></span></div></section>
+<section class="card framePanel"><h2>フレーム一覧</h2><button id="addImages" class="drop"><strong>＋ 画像を追加</strong><div class="muted">複数選択OK・ここにドロップも可能</div></button><input type="file" accept="image/*" multiple hidden id="files"><button id="loadSheet" class="full">スプライトシートを読み込む</button><input type="file" accept="image/*" hidden id="sheetFile"><div id="frames" class="frames"></div><div id="empty" class="empty">画像はまだありません。上のボタンから追加してください。</div><div class="row secondary"><button id="sortAsc">名前順 ↑</button><button id="sortDesc">名前順 ↓</button><button id="addBlank">＋ 空コマ</button></div><div class="row"><button id="deleteFrame">選択コマ削除</button><button id="clear">すべて削除</button><span id="count" class="muted grow" style="text-align:right"></span></div></section>
 </div><aside class="settings">
 <section class="card"><h2>選択画像の位置調整</h2><div class="fields"><div class="field"><label for="x">X位置 (1px単位)</label><input id="x" type="number" step="1" value="0"></div><div class="field"><label for="y">Y位置 (1px単位)</label><input id="y" type="number" step="1" value="0"></div><div class="field"><label for="rotation">回転 (°)</label><input id="rotation" type="number" value="0"></div></div><div id="selectedInfo" class="hint">画像を選択してください</div></section>
 <section class="card"><details class="settingDetails" open><summary>シート設定</summary><div class="fields"><div class="field"><label for="fw">コマ幅 (px)</label><input id="fw" type="number" min="1" max="8192" placeholder="画像読込時に自動設定"></div><div class="field"><label for="fh">コマ高さ (px)</label><input id="fh" type="number" min="1" max="8192" placeholder="画像読込時に自動設定"></div><div class="field"><label for="cols">横に並べる数（1行のコマ数）</label><input id="cols" type="number" min="1" max="64" value="4"></div><div class="field"><label for="gap">コマ間隔 (px)</label><input id="gap" type="number" min="0" max="128" value="0"></div></div><p><label><input id="auto" type="checkbox" checked> 縦に並べる数を自動調整</label></p><div id="rowField" hidden class="field"><label for="rows">縦に並べる数</label><input id="rows" type="number" min="1" max="64" value="4"></div><div class="field" style="margin-top:12px"><label for="batchScale"><strong>コマ枠＋全画像を一括拡大縮小 (%)</strong></label><input id="batchScale" type="number" min="10" max="400" step="10" value="100"></div><p class="hint">例：200%で枠・画像・位置が2倍。適用後は100%に戻ります。</p><button id="applySettings" class="primary full" style="margin-top:12px">変更を反映・全体表示</button><p id="pendingInfo" class="hint" aria-live="polite">画像読込時に最大画像サイズへ自動設定します。</p><p id="sheetInfo" class="hint"></p></details></section>
 <p class="hint">一括倍率はコマ枠・画像・位置を同じ割合で変更します。並べ替えでは位置・回転を保持します。PNG保存時にガイド線は含まれません。</p>
 </aside></div></main>
+<dialog id="sheetImport" aria-labelledby="sheetImportTitle">
+  <form id="sheetImportForm">
+    <h2 id="sheetImportTitle">スプライトシートを読み込む</h2>
+    <p id="sheetSourceInfo"></p>
+    <div class="fields">
+      <div class="field"><label for="sheetFrameWidth">コマ幅 (px)</label><input id="sheetFrameWidth" type="number" min="1" max="8192" required></div>
+      <div class="field"><label for="sheetFrameHeight">コマ高さ (px)</label><input id="sheetFrameHeight" type="number" min="1" max="8192" required></div>
+      <div class="field"><label for="sheetGap">コマ間隔 (px)</label><input id="sheetGap" type="number" min="0" max="128" required></div>
+    </div>
+    <p id="sheetGridInfo" aria-live="polite"></p>
+    <p id="sheetReplaceNotice" class="hint">読み込むと、現在のフレームが置き換わります。</p>
+    <div class="row"><button type="button" id="cancelSheetImport">キャンセル</button><button class="primary" id="importSheet">コマに分割して読み込む</button></div>
+  </form>
+</dialog>
 <script>
 (()=>{'use strict';const $=id=>document.getElementById(id),stage=$('stage'),cv=$('canvas'),ctx=cv.getContext('2d');
 let frames=[],selected=-1,zoom=1,panX=0,panY=0,grid=true,centerLines=false,checker=true,drag=null;
@@ -24,13 +41,148 @@ const rows=()=>cfg.auto?Math.max(1,Math.ceil(Math.max(1,frames.length)/cfg.cols)
 const size=()=>({w:cfg.cols*cfg.fw+(cfg.cols-1)*cfg.gap,h:rows()*cfg.fh+(rows()-1)*cfg.gap});
 const cell=i=>({x:(i%cfg.cols)*(cfg.fw+cfg.gap),y:Math.floor(i/cfg.cols)*(cfg.fh+cfg.gap)});
 const number=(id,def)=>{const v=Number($(id).value);return Number.isFinite(v)?v:def};
-function drawFrame(c,f,i){if(!f?.img)return;const p=cell(i);c.save();c.beginPath();c.rect(p.x,p.y,cfg.fw,cfg.fh);c.clip();c.translate(p.x+cfg.fw/2+f.x,p.y+cfg.fh/2+f.y);c.rotate(f.rotation*Math.PI/180);c.imageSmoothingEnabled=false;c.drawImage(f.img,-f.img.naturalWidth*f.scale/2,-f.img.naturalHeight*f.scale/2,f.img.naturalWidth*f.scale,f.img.naturalHeight*f.scale);c.restore()}
+function drawFrame(c,f,i){if(!f?.img)return;const p=cell(i);c.save();c.beginPath();c.rect(p.x,p.y,cfg.fw,cfg.fh);c.clip();c.translate(p.x+cfg.fw/2+f.x,p.y+cfg.fh/2+f.y);c.rotate(f.rotation*Math.PI/180);c.imageSmoothingEnabled=false;c.drawImage(f.img,-f.img.width*f.scale/2,-f.img.height*f.scale/2,f.img.width*f.scale,f.img.height*f.scale);c.restore()}
 function render(){const {w,h}=size(),r=stage.getBoundingClientRect(),vw=r.width||320,vh=r.height||300,dpr=Math.min(devicePixelRatio||1,2);cv.width=Math.round(vw*dpr);cv.height=Math.round(vh*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#262d3b';ctx.fillRect(0,0,vw,vh);ctx.save();ctx.translate((vw-w*zoom)/2+panX,(vh-h*zoom)/2+panY);ctx.scale(zoom,zoom);
 ctx.fillStyle='#f5f5f5';ctx.fillRect(0,0,w,h);if(checker){ctx.fillStyle='#d1d5db';for(let y=0;y<h;y+=12)for(let x=0;x<w;x+=12)if((Math.floor(x/12)+Math.floor(y/12))%2===0)ctx.fillRect(x,y,Math.min(12,w-x),Math.min(12,h-y))}ctx.save();ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();frames.forEach((f,i)=>{if(Math.floor(i/cfg.cols)<rows())drawFrame(ctx,f,i)});ctx.restore();if(grid){ctx.strokeStyle='#5389ee';ctx.lineWidth=1/zoom;for(let i=0;i<cfg.cols;i++)for(let j=0;j<rows();j++)ctx.strokeRect(i*(cfg.fw+cfg.gap),j*(cfg.fh+cfg.gap),cfg.fw,cfg.fh)}if(centerLines){ctx.save();ctx.strokeStyle='rgba(255,75,130,.9)';ctx.lineWidth=1/zoom;ctx.setLineDash([4/zoom,3/zoom]);for(let i=0;i<cfg.cols;i++)for(let j=0;j<rows();j++){const x=i*(cfg.fw+cfg.gap),y=j*(cfg.fh+cfg.gap);ctx.beginPath();ctx.moveTo(x+cfg.fw/2,y);ctx.lineTo(x+cfg.fw/2,y+cfg.fh);ctx.moveTo(x,y+cfg.fh/2);ctx.lineTo(x+cfg.fw,y+cfg.fh/2);ctx.stroke()}ctx.restore()}if(selected>=0&&Math.floor(selected/cfg.cols)<rows()){const p=cell(selected);ctx.strokeStyle='#ffbc4e';ctx.lineWidth=2/zoom;ctx.strokeRect(p.x,p.y,cfg.fw,cfg.fh)}ctx.restore();$('sizeLabel').textContent=w+' × '+h+'px';$('sheetInfo').textContent='横 '+cfg.cols+'コマ × 縦 '+rows()+'コマ / '+w+' × '+h+'px';$('zoomLabel').textContent=Math.round(zoom*100)+'%';$('zoomRange').value=Math.max(25,Math.min(800,Math.round(zoom*100/25)*25))}
-function sync(){const f=frames[selected];for(const [id,key] of [['x','x'],['y','y'],['rotation','rotation']]){$(id).value=f?Math.round(f[key]):0;$(id).disabled=!f?.img}$('center').disabled=!f?.img;$('selectedInfo').textContent=f?(f.name+(f.img?' / '+f.img.naturalWidth+' × '+f.img.naturalHeight+'px':' / 空コマ')):'画像を選択してください';$('count').textContent=frames.filter(f=>f.img).length+'枚 / '+frames.length+'コマ';$('empty').hidden=frames.length>0;const list=$('frames');list.replaceChildren();frames.forEach((f,i)=>{const item=document.createElement('button');item.className='frame'+(selected===i?' selected':'');if(f.img){const img=document.createElement('img');img.src=f.thumbnail;img.alt=f.name;item.append(img)}else{const blank=document.createElement('div');blank.className='empty';blank.textContent='空';item.append(blank)}const label=document.createElement('span');label.textContent=(i+1)+'. '+f.name;item.append(label);item.onclick=()=>{selected=i;sync()};list.append(item)});render()}
+function sync(){const f=frames[selected];for(const [id,key] of [['x','x'],['y','y'],['rotation','rotation']]){$(id).value=f?Math.round(f[key]):0;$(id).disabled=!f?.img}$('center').disabled=!f?.img;$('selectedInfo').textContent=f?(f.name+(f.img?' / '+f.img.width+' × '+f.img.height+'px':' / 空コマ')):'画像を選択してください';$('count').textContent=frames.filter(f=>f.img).length+'枚 / '+frames.length+'コマ';$('empty').hidden=frames.length>0;const list=$('frames');list.replaceChildren();frames.forEach((f,i)=>{const item=document.createElement('button');item.className='frame'+(selected===i?' selected':'');if(f.img){const img=document.createElement('img');img.src=f.thumbnail;img.alt=f.name;item.append(img)}else{const blank=document.createElement('div');blank.className='empty';blank.textContent='空';item.append(blank)}const label=document.createElement('span');label.textContent=(i+1)+'. '+f.name;item.append(label);item.onclick=()=>{selected=i;sync()};list.append(item)});render()}
 function fit(){const s=size(),r=stage.getBoundingClientRect();zoom=Math.max(.05,Math.min(8,(r.width-30)/s.w,(r.height-30)/s.h));panX=panY=0;render()}
-async function addFiles(files){for(const file of files){if(!file.type.startsWith('image/'))continue;const url=URL.createObjectURL(file);try{const img=new Image();img.src=url;await img.decode();if(img.naturalWidth>8192||img.naturalHeight>8192){alert(file.name+' は8192pxを超えるため読み込めません。');continue}const thumbCanvas=document.createElement('canvas');thumbCanvas.width=96;thumbCanvas.height=72;const tc=thumbCanvas.getContext('2d');const ratio=Math.min(96/img.naturalWidth,72/img.naturalHeight);const tw=img.naturalWidth*ratio,th=img.naturalHeight*ratio;tc.imageSmoothingEnabled=false;tc.drawImage(img,(96-tw)/2,(72-th)/2,tw,th);const thumbnail=thumbCanvas.toDataURL('image/png');const f={img,thumbnail,name:file.name,x:0,y:0,scale:1,rotation:0};const empty=frames.findIndex(f=>!f.img);if(empty>=0){frames[empty]=f;selected=empty}else{frames.push(f);selected=frames.length-1}}catch(e){alert(file.name+' を読み込めませんでした')}finally{URL.revokeObjectURL(url)}}if(!frameSizeManual){const images=frames.filter(f=>f.img);if(images.length){cfg.fw=Math.max(...images.map(f=>f.img.naturalWidth));cfg.fh=Math.max(...images.map(f=>f.img.naturalHeight));$('fw').value=cfg.fw;$('fh').value=cfg.fh;$('pendingInfo').textContent='最大画像サイズに自動設定しました。'}}sync();fit()}
-$('addImages').onclick=()=>$('files').click();$('files').onchange=e=>{addFiles([...e.target.files]);e.target.value=''};$('addImages').ondragover=e=>e.preventDefault();$('addImages').ondrop=e=>{e.preventDefault();addFiles([...e.dataTransfer.files])};
+async function decodeImage(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=new Image();
+    img.src=url;
+    await img.decode();
+    if(img.width>8192||img.height>8192)throw new Error('画像の幅・高さは8192px以内にしてください。');
+    return img;
+  }finally{
+    URL.revokeObjectURL(url);
+  }
+}
+
+function makeFrame(img,name){
+  const thumb=document.createElement('canvas');
+  thumb.width=96;
+  thumb.height=72;
+  const context=thumb.getContext('2d');
+  const ratio=Math.min(thumb.width/img.width,thumb.height/img.height);
+  const w=img.width*ratio,h=img.height*ratio;
+  context.imageSmoothingEnabled=false;
+  context.drawImage(img,(thumb.width-w)/2,(thumb.height-h)/2,w,h);
+  return {img,thumbnail:thumb.toDataURL('image/png'),name,x:0,y:0,scale:1,rotation:0};
+}
+
+async function addFiles(files){
+  for(const file of files){
+    if(!file.type.startsWith('image/'))continue;
+    try{
+      const frame=makeFrame(await decodeImage(file),file.name);
+      const empty=frames.findIndex(f=>!f.img);
+      selected=empty<0?frames.length:empty;
+      frames[selected]=frame;
+    }catch(error){
+      alert(file.name+' を読み込めませんでした。 '+error.message);
+    }
+  }
+  if(!frameSizeManual){
+    const images=frames.filter(f=>f.img);
+    if(images.length){
+      cfg.fw=Math.max(...images.map(f=>f.img.width));
+      cfg.fh=Math.max(...images.map(f=>f.img.height));
+      $('fw').value=cfg.fw;
+      $('fh').value=cfg.fh;
+      $('pendingInfo').textContent='最大画像サイズに自動設定しました。';
+    }
+  }
+  sync();
+  fit();
+}
+$('addImages').onclick=()=>$('files').click();
+$('files').onchange=e=>{addFiles([...e.target.files]);e.target.value=''};
+$('addImages').ondragover=e=>e.preventDefault();
+$('addImages').ondrop=e=>{e.preventDefault();addFiles([...e.dataTransfer.files])};
+
+const sheetDialog=$('sheetImport'),sheetForm=$('sheetImportForm');
+let sheetSource=null;
+
+function readSheetGrid(){
+  const {img}=sheetSource;
+  if(!sheetForm.checkValidity())return {error:'コマの幅・高さと間隔を整数で入力してください。'};
+  const fw=number('sheetFrameWidth',0),fh=number('sheetFrameHeight',0),gap=number('sheetGap',0);
+  const cols=(img.width+gap)/(fw+gap),rows=(img.height+gap)/(fh+gap);
+  if(!Number.isInteger(cols)||!Number.isInteger(rows)||cols<1||rows<1){
+    return {error:'画像全体がコマと間隔にぴったり収まる値を指定してください。'};
+  }
+  if(cols>64||rows>64)return {error:'横・縦ともに64コマ以内にしてください。'};
+  return {fw,fh,gap,cols,rows};
+}
+
+function previewSheetGrid(){
+  const {error,cols,rows}=readSheetGrid();
+  $('sheetGridInfo').textContent=error||`${cols}列 × ${rows}行 · ${cols*rows}コマ`;
+  $('importSheet').disabled=Boolean(error);
+}
+
+$('loadSheet').onclick=()=>$('sheetFile').click();
+$('sheetFile').onchange=async e=>{
+  const [file]=e.target.files;
+  e.target.value='';
+  if(!file)return;
+  $('loadSheet').disabled=true;
+  try{
+    const img=await decodeImage(file);
+    if(img.width*img.height>30000000)throw new Error('画像は3,000万画素以内にしてください。');
+    sheetSource={img,name:file.name.replace(/\.[^.]+$/,'')};
+    $('sheetSourceInfo').textContent=`${file.name} · ${img.width} × ${img.height}px`;
+    $('sheetFrameWidth').value=Math.min(img.width,frames.length||frameSizeManual?cfg.fw:16);
+    $('sheetFrameHeight').value=Math.min(img.height,frames.length||frameSizeManual?cfg.fh:16);
+    $('sheetGap').value=cfg.gap;
+    $('sheetReplaceNotice').hidden=frames.length===0;
+    previewSheetGrid();
+    sheetDialog.showModal();
+  }catch(error){
+    alert('スプライトシートを読み込めませんでした。 '+error.message);
+  }finally{
+    $('loadSheet').disabled=false;
+  }
+};
+sheetForm.oninput=previewSheetGrid;
+$('cancelSheetImport').onclick=()=>sheetDialog.close();
+sheetDialog.addEventListener('close',()=>{if(!sheetDialog.open)sheetSource=null});
+sheetForm.onsubmit=e=>{
+  e.preventDefault();
+  const {error,fw,fh,gap,cols,rows}=readSheetGrid();
+  if(error)return;
+  const {img,name}=sheetSource;
+  const imported=[];
+  try{
+    for(let row=0;row<rows;row++){
+      for(let col=0;col<cols;col++){
+        const frame=document.createElement('canvas');
+        frame.width=fw;
+        frame.height=fh;
+        frame.getContext('2d').drawImage(img,col*(fw+gap),row*(fh+gap),fw,fh,0,0,fw,fh);
+        imported.push(makeFrame(frame,`${name}-${imported.length+1}`));
+      }
+    }
+  }catch{
+    $('sheetGridInfo').textContent='コマに分割できませんでした。';
+    return;
+  }
+  frames=imported;
+  selected=0;
+  Object.assign(cfg,{fw,fh,gap,cols,rows,auto:true});
+  frameSizeManual=true;
+  for(const [id,key] of settingsFields)$(id).value=cfg[key];
+  $('auto').checked=true;
+  $('rowField').hidden=true;
+  $('batchScale').value=100;
+  $('pendingInfo').textContent='読み込んだシートに設定を合わせました。';
+  $('applySettings').textContent='変更を反映・全体表示';
+  sheetDialog.close();
+  sync();
+  fit();
+};
+
 function sort(desc){const current=frames[selected],collator=new Intl.Collator('ja',{numeric:true,sensitivity:'base'});frames.sort((a,b)=>!a.img||!b.img?(!a.img&&!b.img?0:!a.img?1:-1):(desc?-1:1)*collator.compare(a.name,b.name));selected=current?frames.indexOf(current):-1;sync()}$('sortAsc').onclick=()=>sort(false);$('sortDesc').onclick=()=>sort(true);
 $('addBlank').onclick=()=>{frames.push({img:null,name:'空コマ',x:0,y:0,scale:1,rotation:0});selected=frames.length-1;sync()};$('deleteFrame').onclick=()=>{if(selected<0)return;frames.splice(selected,1);selected=Math.min(selected,frames.length-1);sync()};$('clear').onclick=()=>{if(frames.length&&!confirm('すべてのコマを削除しますか？'))return;frames=[];selected=-1;cfg.fw=cfg.fh=1;frameSizeManual=false;$('fw').value=$('fh').value='';$('pendingInfo').textContent='画像読込時に最大画像サイズへ自動設定します。';sync();fit()};
 const settingsFields=[['fw','fw',1,8192],['fh','fh',1,8192],['cols','cols',1,64],['gap','gap',0,128],['rows','rows',1,64]];

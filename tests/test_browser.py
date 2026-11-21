@@ -210,6 +210,67 @@ class BrowserTests(unittest.TestCase):
                 self.assertEqual(saved['frames'], data['frames'])
                 self.assertEqual(saved['activeColor'], size - 1)
 
+    def test_studio_imports_one_sheet_as_editable_frames(self):
+        self.page.set_viewport_size({'width': 390, 'height': 844})
+        self.page.goto(self.url + '/sprite-sheet-studio/')
+        png = self.page.evaluate('''() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 7; canvas.height = 5;
+            const ctx = canvas.getContext('2d');
+            [[0, 0, '#ff0000'], [4, 0, '#00ff00'], [0, 3, '#0000ff']].forEach(([x, y, color]) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y, 1, 1);
+            });
+            return canvas.toDataURL('image/png').split(',')[1];
+        }''')
+        self.page.locator('#addBlank').click()
+
+        def open_sheet():
+            with self.page.expect_file_chooser() as event:
+                self.page.locator('#loadSheet').click()
+            chooser = event.value
+            self.assertFalse(chooser.is_multiple())
+            chooser.set_files({'name': 'sheet.png', 'mimeType': 'image/png',
+                               'buffer': base64.b64decode(png)})
+            self.page.locator('#sheetImport').wait_for(state='visible')
+
+        open_sheet()
+        self.assertTrue(self.page.locator('#sheetReplaceNotice').is_visible())
+        self.page.locator('#sheetFrameWidth').fill('3')
+        self.assertTrue(self.page.locator('#importSheet').is_disabled())
+        self.page.locator('#cancelSheetImport').click()
+        self.assertEqual(self.page.locator('#count').inner_text(), '0枚 / 1コマ')
+
+        open_sheet()
+        self.page.locator('#sheetFrameWidth').fill('3')
+        self.page.locator('#sheetFrameHeight').fill('2')
+        self.page.locator('#sheetGap').fill('1')
+        self.assertIn('2列 × 2行', self.page.locator('#sheetGridInfo').inner_text())
+        self.page.locator('#importSheet').click()
+        self.assertEqual(self.page.locator('#frames .frame span').all_text_contents(),
+                         ['1. sheet-1', '2. sheet-2', '3. sheet-3', '4. sheet-4'])
+        self.assertEqual(self.page.locator('#cols').input_value(), '2')
+        self.page.locator('#right').click()
+        self.assertEqual(self.page.locator('#x').input_value(), '1')
+
+        with self.page.expect_download() as event:
+            self.page.locator('#export').click()
+        exported = base64.b64encode(Path(event.value.path()).read_bytes()).decode()
+        result = self.page.evaluate('''async png => {
+            const img = new Image();
+            img.src = 'data:image/png;base64,' + png;
+            await img.decode();
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width; canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const pixels = [[0,0], [1,0], [4,0], [0,3], [4,3]].map(([x,y]) =>
+                Array.from(ctx.getImageData(x,y,1,1).data));
+            return [img.width, img.height, pixels];
+        }''', exported)
+        self.assertEqual(result, [7, 5, [[0, 0, 0, 0], [255, 0, 0, 255],
+                                         [0, 255, 0, 255], [0, 0, 255, 255], [0, 0, 0, 0]]])
+
     def test_viewer_filename_length_does_not_change_image_layout(self):
         names = ['a.png', 'long_filename_' * 12 + '.png', '比較用の長いファイル名' * 12 + '.png']
         for width, height in [(320, 640), (390, 844), (530, 700), (531, 700),
