@@ -29,7 +29,7 @@ Viewer tests check that switching between short and long filenames keeps image
 frames, rendered pixels, and fit scales identical on mobile and desktop layouts.
 
 The v5 tests use 16 opaque colors plus transparency and check legacy palette
-migration, all three built-in presets, and PNG imports at the 16/17-color boundary.
+migration, both built-in presets, and PNG imports at the 16/17-color boundary.
 Prep tests export transparent, 7-, 8-, and 16-color images as single frames and
 sprite sheets, then import the TXT into Pixlet and verify the pixels. They also
 check rejection of 17 colors across a sheet, reduction to 16 colors, and the

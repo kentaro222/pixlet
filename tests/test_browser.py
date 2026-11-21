@@ -16,15 +16,16 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 
-STANDARD_COLORS = ['#17191F', '#344A72', '#9B5688', '#3E875F', '#A36450', '#736A71',
-                   '#B9BAC6', '#F4F4F4', '#D95757', '#E58A47', '#DDBB4C', '#55A868',
-                   '#4C78A8', '#8B77AF', '#D878A2', '#E6AA91']
+PREVIOUS_STANDARD_COLORS = [
+    '#17191F', '#344A72', '#9B5688', '#3E875F', '#A36450', '#736A71', '#B9BAC6', '#F4F4F4',
+    '#D95757', '#E58A47', '#DDBB4C', '#55A868', '#4C78A8', '#8B77AF', '#D878A2', '#E6AA91',
+]
 GRAYSCALE_COLORS = ['#000000', '#121212', '#242424', '#373737', '#494949', '#5B5B5B',
                     '#6D6D6D', '#808080', '#929292', '#A4A4A4', '#B6B6B6', '#C8C8C8',
                     '#DBDBDB', '#EDEDED', '#FFFFFF', '#FFFFFF']
-PICO8_COLORS = ['#000000', '#1D2B53', '#7E2553', '#008751', '#AB5236', '#5F574F',
-                '#C2C3C7', '#FFF1E8', '#FF004D', '#FFA300', '#FFEC27', '#00E436',
-                '#29ADFF', '#83769C', '#FF77A8', '#FFCCAA']
+STANDARD_COLORS = ['#000000', '#1D2B53', '#7E2553', '#008751', '#AB5236', '#5F574F',
+                   '#C2C3C7', '#FFF1E8', '#FF004D', '#FFA300', '#FFEC27', '#00E436',
+                   '#29ADFF', '#83769C', '#FF77A8', '#FFCCAA']
 
 
 def project():
@@ -196,10 +197,10 @@ class BrowserTests(unittest.TestCase):
         self.assertTrue(self.download_prep_code().startswith('Pixlet Project v2\n'))
 
     def test_legacy_palettes_keep_existing_indices_and_colors(self):
-        for size in [8, 16]:
+        for size in [8, 16, 17]:
             with self.subTest(palette_size=size):
                 data = project()
-                data['palette'] = data['palette'][:size]
+                data['palette'] = ['transparent', *PREVIOUS_STANDARD_COLORS[:size - 1]]
                 data['frames'][0]['layers'][1][0] = size - 1
                 data['activeColor'] = size - 1
                 self.import_project(data)
@@ -531,11 +532,19 @@ class BrowserTests(unittest.TestCase):
                 self.assertEqual(self.saved(), swapped)
 
     def test_new_canvas_preset_selection_persists_and_undo_restores_work(self):
+        self.page.mouse.click(*self.xy(8, 8))
+        self.assertEqual(self.saved()['palette'], ['transparent', *STANDARD_COLORS])
+        self.page.locator('#menuBtn').click()
+        self.page.locator('#paletteManageBtn').click()
+        self.assertEqual(self.page.locator('#palettePresets .paletteEntryName').all_text_contents(),
+                         ['標準カラー', 'グレースケール'])
+        self.page.locator('#paletteManageSheet .closeSheet').click()
         original = project()
+        original['palette'] = ['transparent', *PREVIOUS_STANDARD_COLORS]
         original.update(activeLayer=0, activeColor=6, layerVisible=[True, False, False])
         original['frames'][0]['layers'][0][0] = 5
         palettes = [['transparent', *colors] for colors in
-                    [STANDARD_COLORS, GRAYSCALE_COLORS, PICO8_COLORS]]
+                    [STANDARD_COLORS, GRAYSCALE_COLORS]]
         for index, palette in enumerate(palettes):
             with self.subTest(preset=index):
                 self.import_project(original)
@@ -543,7 +552,7 @@ class BrowserTests(unittest.TestCase):
                 self.page.locator('#menuBtn').click()
                 self.page.locator('#newCanvasBtn').click()
                 self.assertEqual(self.page.locator('#newCanvasPalette option').all_text_contents(),
-                                 ['標準カラー', 'グレースケール', 'PICO-8'])
+                                 ['標準カラー', 'グレースケール'])
                 self.page.locator('#newCanvasPalette').select_option(str(index))
                 self.page.locator('#wInput').fill('8')
                 self.page.locator('#newCanvasHeight').fill('12')

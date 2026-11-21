@@ -502,19 +502,15 @@ const LEGACY_GRAYSCALE_COLORS = [
 ];
 const PALETTE_PRESETS = [
   {name:"標準カラー",colors:[
-    "#17191F","#344A72","#9B5688","#3E875F","#A36450","#736A71","#B9BAC6","#F4F4F4",
-    "#D95757","#E58A47","#DDBB4C","#55A868","#4C78A8","#8B77AF","#D878A2","#E6AA91"
+    "#000000","#1D2B53","#7E2553","#008751","#AB5236","#5F574F","#C2C3C7","#FFF1E8",
+    "#FF004D","#FFA300","#FFEC27","#00E436","#29ADFF","#83769C","#FF77A8","#FFCCAA"
   ]},
   {name:"グレースケール",colors:Array.from({length:OPAQUE_COLOR_COUNT},(_,i)=>{
     // Keep the established ramp ending in white at slot 15.
     const lastStep=PREVIOUS_OPAQUE_COLOR_COUNT-1;
     const level=Math.round(255*Math.min(i,lastStep)/lastStep);
     return rgbToHex(level,level,level).toUpperCase();
-  })},
-  {name:"PICO-8",colors:[
-    "#000000","#1D2B53","#7E2553","#008751","#AB5236","#5F574F","#C2C3C7","#FFF1E8",
-    "#FF004D","#FFA300","#FFEC27","#00E436","#29ADFF","#83769C","#FF77A8","#FFCCAA"
-  ]}
+  })}
 ];
 
 const DEFAULT = {
