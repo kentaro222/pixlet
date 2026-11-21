@@ -16,11 +16,20 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 
+STANDARD_COLORS = ['#17191F', '#344A72', '#9B5688', '#3E875F', '#A36450', '#736A71',
+                   '#B9BAC6', '#F4F4F4', '#D95757', '#E58A47', '#DDBB4C', '#55A868',
+                   '#4C78A8', '#8B77AF', '#D878A2', '#E6AA91']
+GRAYSCALE_COLORS = ['#000000', '#121212', '#242424', '#373737', '#494949', '#5B5B5B',
+                    '#6D6D6D', '#808080', '#929292', '#A4A4A4', '#B6B6B6', '#C8C8C8',
+                    '#DBDBDB', '#EDEDED', '#FFFFFF', '#FFFFFF']
+PICO8_COLORS = ['#000000', '#1D2B53', '#7E2553', '#008751', '#AB5236', '#5F574F',
+                '#C2C3C7', '#FFF1E8', '#FF004D', '#FFA300', '#FFEC27', '#00E436',
+                '#29ADFF', '#83769C', '#FF77A8', '#FFCCAA']
+
 
 def project():
     return dict(version=2, projectName='review', width=16, height=16,
-                palette=['transparent', '#17191F', '#F4F4F4', '#D95757',
-                         '#E58A47', '#DDBB4C', '#55A868', '#4C78A8'],
+                palette=['transparent', *STANDARD_COLORS],
                 frames=[{'layers': [[0] * 256 for _ in range(3)]}],
                 activeFrame=0, activeLayer=1, activeColor=1,
                 loopStart=None, loopEnd=None, layerVisible=[True] * 3)
@@ -57,7 +66,7 @@ class BrowserTests(unittest.TestCase):
         self.errors = []
         self.page.on('pageerror', lambda error: self.errors.append(str(error)))
         self.page.goto(self.url)
-        self.page.wait_for_function("document.title === 'Pixlet v4.0'")
+        self.page.wait_for_function("document.title === 'Pixlet v5.0'")
         self.page.wait_for_function("document.querySelector('#view').width > 0")
 
     def tearDown(self):
@@ -66,6 +75,9 @@ class BrowserTests(unittest.TestCase):
 
     def import_project(self, data):
         code = 'Pixlet Project v2\nName: review\nData: ' + base64.b64encode(json.dumps(data).encode()).decode()
+        self.import_code(code)
+
+    def import_code(self, code):
         self.page.locator('#menuBtn').click()
         self.page.locator('#saveCodeBtn').click()
         self.page.locator('#codeArea').fill(code)
@@ -79,6 +91,123 @@ class BrowserTests(unittest.TestCase):
         zoom = int(min((box['width'] - 20) / 16, (box['height'] - 20) / 16))
         return (box['x'] + int((box['width'] - 16 * zoom) / 2) + (x + .5) * zoom,
                 box['y'] + int((box['height'] - 16 * zoom) / 2) + (y + .5) * zoom)
+
+    def upload_prep_image(self, color_count, semi=False):
+        self.page.goto(self.url + '/prep/')
+        image = self.page.evaluate('''({count, semi}) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32; canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            for (let x = 0; x < count; x++) {
+                ctx.fillStyle = `rgb(${x * 13}, ${255 - x * 11}, 80)`;
+                ctx.fillRect(x, 0, 1, 1);
+            }
+            if (count) ctx.fillRect(31, 15, 1, 1);
+            if (semi) {
+                ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
+                ctx.fillRect(30, 15, 1, 1);
+            }
+            return {png: canvas.toDataURL('image/png').split(',')[1],
+                    pixels: Array.from(ctx.getImageData(0, 0, 32, 16).data)};
+        }''', {'count': color_count, 'semi': semi})
+        self.page.locator('#file').set_input_files({
+            'name': '素材.png', 'mimeType': 'image/png',
+            'buffer': base64.b64decode(image['png'])})
+        self.page.wait_for_function("document.querySelector('#assetCount').textContent === '1'")
+        return image['pixels']
+
+    def download_prep_code(self):
+        with self.page.expect_download() as event:
+            self.page.locator('#saveTxt').click()
+        return Path(event.value.path()).read_text()
+
+    def test_prep_exports_16_colors_and_transparency_to_v5(self):
+        for count in [0, 7, 8, 16]:
+            for mode in ['single', 'row']:
+                with self.subTest(colors=count, mode=mode):
+                    pixels = self.upload_prep_image(count)
+                    self.page.locator('#exportName').fill('比較用16色')
+                    if mode == 'row':
+                        self.page.locator('#codeMode').select_option('row')
+                        self.page.locator('#codeW').fill('16')
+                        self.page.locator('#codeH').fill('16')
+                    self.assertIn('ok', self.page.locator('#compat').get_attribute('class'))
+                    self.assertIn('不透明16色以内', self.page.locator('#codeInfo').inner_text())
+                    code = self.download_prep_code()
+                    data = json.loads(base64.b64decode(code.split('Data: ')[1]))
+                    self.assertEqual(data['version'], 2)
+                    self.assertEqual(len(data['palette']), 17)
+                    self.assertEqual(data['palette'][0], 'transparent')
+                    self.assertEqual(data['projectName'], '比較用16色')
+                    fw = 16 if mode == 'row' else 32
+                    self.assertEqual((data['width'], data['height']), (fw, 16))
+                    self.assertEqual(len(data['frames']), 32 // fw)
+                    for frame in data['frames']:
+                        self.assertEqual(frame['layers'][0], [0] * (fw * 16))
+                        self.assertEqual(frame['layers'][2], [0] * (fw * 16))
+                    for y in range(16):
+                        for x in range(32):
+                            frame = data['frames'][x // fw]
+                            index = frame['layers'][1][y * fw + x % fw]
+                            rgba = ([int(data['palette'][index][i:i + 2], 16)
+                                     for i in (1, 3, 5)] + [255]) if index else [0, 0, 0, 0]
+                            offset = (y * 32 + x) * 4
+                            self.assertEqual(rgba, pixels[offset:offset + 4])
+                    self.page.goto(self.url)
+                    self.import_code(code)
+                    saved = self.saved()
+                    self.assertEqual(saved['frames'], data['frames'])
+                    self.assertEqual(saved['palette'], [color.upper() if i else color
+                                                       for i, color in enumerate(data['palette'])])
+
+    def test_prep_rejects_17_colors_then_reduces_to_16(self):
+        self.upload_prep_image(17)
+        self.page.locator('#codeMode').select_option('row')
+        self.page.locator('#codeW').fill('16')
+        self.page.locator('#codeH').fill('16')
+        self.assertNotIn('ok', self.page.locator('#compat').get_attribute('class'))
+        self.page.locator('#saveTxt').click()
+        self.assertIn('16色を超えています', self.page.locator('#toast').inner_text())
+        self.page.locator('#reduce').click()
+        self.assertEqual(self.page.locator('#colorLimit').input_value(), '16')
+        self.assertEqual(self.page.locator('#colorLimit option').all_text_contents(),
+                         [str(i) for i in range(2, 17)])
+        self.page.locator('#applyOp').click()
+        self.assertIn('ok', self.page.locator('#compat').get_attribute('class'))
+        code = self.download_prep_code()
+        data = json.loads(base64.b64decode(code.split('Data: ')[1]))
+        self.assertEqual(len(data['palette']), 17)
+        self.assertEqual(len(data['frames']), 2)
+        colors = {color for frame in data['frames'] for color in frame['layers'][1]} - {0}
+        self.assertEqual(len(colors), 16)
+        self.assertEqual(data['frames'][0]['layers'][1][32], 0)
+        self.page.goto(self.url)
+        self.import_code(code)
+        self.assertEqual(self.saved()['frames'], data['frames'])
+
+    def test_prep_still_requires_reducing_semitransparency(self):
+        self.upload_prep_image(16, semi=True)
+        self.assertIn('半透明', self.page.locator('#compat').inner_text())
+        self.page.locator('#saveTxt').click()
+        self.assertIn('半透明', self.page.locator('#toast').inner_text())
+        self.page.locator('#reduce').click()
+        self.page.locator('#applyOp').click()
+        self.assertIn('ok', self.page.locator('#compat').get_attribute('class'))
+        self.assertTrue(self.download_prep_code().startswith('Pixlet Project v2\n'))
+
+    def test_legacy_palettes_keep_existing_indices_and_colors(self):
+        for size in [8, 16]:
+            with self.subTest(palette_size=size):
+                data = project()
+                data['palette'] = data['palette'][:size]
+                data['frames'][0]['layers'][1][0] = size - 1
+                data['activeColor'] = size - 1
+                self.import_project(data)
+                saved = self.saved()
+                self.assertEqual(len(saved['palette']), 17)
+                self.assertEqual(saved['palette'][:size], data['palette'])
+                self.assertEqual(saved['frames'], data['frames'])
+                self.assertEqual(saved['activeColor'], size - 1)
 
     def test_viewer_filename_length_does_not_change_image_layout(self):
         names = ['a.png', 'long_filename_' * 12 + '.png', '比較用の長いファイル名' * 12 + '.png']
@@ -129,7 +258,7 @@ class BrowserTests(unittest.TestCase):
         invalid = [dict(frames=[]), dict(width=0), dict(height=65), dict(width=1.5),
                    dict(version=999), dict(palette=['transparent']),
                    dict(frames=[{'layers': [[0] * 256]}])]
-        for value in [-1, 8, 1.5, '1']:
+        for value in [-1, 17, 1.5, '1']:
             frames = copy.deepcopy(original['frames'])
             frames[0]['layers'][1][0] = value
             invalid.append(dict(frames=frames))
@@ -149,7 +278,7 @@ class BrowserTests(unittest.TestCase):
 
     def test_valid_v2_roundtrip_and_index_recovery(self):
         data = project()
-        data.update(activeFrame=-1, activeLayer=20, activeColor=8, loopStart=99, loopEnd=-1)
+        data.update(activeFrame=-1, activeLayer=20, activeColor=17, loopStart=99, loopEnd=-1)
         data['frames'][0]['layers'][1][136] = 7
         self.import_project(data)
         saved = self.saved()
@@ -405,8 +534,8 @@ class BrowserTests(unittest.TestCase):
         original = project()
         original.update(activeLayer=0, activeColor=6, layerVisible=[True, False, False])
         original['frames'][0]['layers'][0][0] = 5
-        palettes = [original['palette'], ['transparent', '#000000', '#2B2B2B', '#555555',
-                                        '#808080', '#AAAAAA', '#D4D4D4', '#FFFFFF']]
+        palettes = [['transparent', *colors] for colors in
+                    [STANDARD_COLORS, GRAYSCALE_COLORS, PICO8_COLORS]]
         for index, palette in enumerate(palettes):
             with self.subTest(preset=index):
                 self.import_project(original)
@@ -414,7 +543,7 @@ class BrowserTests(unittest.TestCase):
                 self.page.locator('#menuBtn').click()
                 self.page.locator('#newCanvasBtn').click()
                 self.assertEqual(self.page.locator('#newCanvasPalette option').all_text_contents(),
-                                 ['標準カラー', 'グレースケール'])
+                                 ['標準カラー', 'グレースケール', 'PICO-8'])
                 self.page.locator('#newCanvasPalette').select_option(str(index))
                 self.page.locator('#wInput').fill('8')
                 self.page.locator('#newCanvasHeight').fill('12')
@@ -442,7 +571,7 @@ class BrowserTests(unittest.TestCase):
         original = project()
         original.update(activeLayer=0, layerVisible=[True, False, True])
         original['frames'][0]['layers'][0][0] = 5
-        for color_count in [2, 8]:
+        for color_count in [2, 8, 16, 17]:
             with self.subTest(colors=color_count):
                 self.import_project(original)
                 before = self.saved()
@@ -451,7 +580,7 @@ class BrowserTests(unittest.TestCase):
                     canvas.width = 32; canvas.height = 16;
                     const ctx = canvas.getContext('2d');
                     for (let x = 0; x < count; x++) {
-                        ctx.fillStyle = `rgb(${x * 30}, ${255 - x * 30}, 80)`;
+                        ctx.fillStyle = `rgb(${x * 13}, ${255 - x * 11}, 80)`;
                         ctx.fillRect(x, 0, 1, 1);
                     }
                     ctx.fillRect(16, 0, 1, 1);
@@ -464,7 +593,7 @@ class BrowserTests(unittest.TestCase):
                     'buffer': base64.b64decode(png)})
                 self.page.wait_for_function("document.querySelector('#pngInfo').textContent.includes('推定:')")
                 self.page.locator('#pngImportDo').click()
-                if color_count > 7:
+                if color_count > 16:
                     self.page.locator('#pngReduceDo').click()
                 imported = self.saved()
                 self.assertEqual((imported['width'], imported['height']), (16, 16))
@@ -476,14 +605,17 @@ class BrowserTests(unittest.TestCase):
                     self.assertEqual(frame['layers'][0], [0] * 256)
                     self.assertEqual(frame['layers'][2], [0] * 256)
                     self.assertEqual(sum(value != 0 for value in frame['layers'][1]),
-                                     color_count if index == 0 else 1)
-                    self.assertTrue(all(0 <= value <= 7 for value in frame['layers'][1]))
+                                     min(color_count, 16) if index == 0 else 1)
+                    self.assertTrue(all(0 <= value <= 16 for value in frame['layers'][1]))
                 self.page.locator('#undoBtn').click()
                 self.assertEqual(self.saved(), before)
                 self.page.locator('#redoBtn').click()
-                self.assertEqual(self.saved(), imported)
+                # v5 restores normalize HEX spelling while preserving the colors.
+                restored = {**imported, 'palette': ['transparent',
+                            *[color.upper() for color in imported['palette'][1:]]]}
+                self.assertEqual(self.saved(), restored)
                 self.page.reload()
-                self.assertEqual(self.saved(), imported)
+                self.assertEqual(self.saved(), restored)
                 self.assertEqual(self.page.locator('.layer.active').get_attribute('data-layer'), '1')
 
     def test_picker_and_long_press_ignore_hidden_layers(self):
