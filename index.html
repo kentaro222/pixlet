@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>Pixlet</title>
+<title>Pixlet v5.0</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <link rel="manifest" href="manifest.json">
 <style>
@@ -35,7 +35,7 @@ header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white
 #crosshair{position:absolute;display:none;width:20px;height:20px;border:2px solid white;border-radius:4px;pointer-events:none;box-shadow:0 0 0 1px #000}
 #framebar{display:grid;grid-template-columns:38px minmax(42px,1fr) 38px 38px 38px 46px 38px;gap:4px}
 #frameInfo{display:flex;align-items:center;justify-content:center;background:var(--panel);border-radius:12px;font-weight:700}
-#palette{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+#palette{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px}
 .swatch{height:48px;border-radius:12px;border:2px solid transparent;position:relative}
 .swatch.active{border-color:white;box-shadow:0 0 0 2px var(--accent) inset}
 .swatch.transparent{
@@ -52,7 +52,8 @@ header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white
 #selectionSize{position:absolute;top:8px;left:8px;padding:4px 8px;border-radius:6px;background:#000c;font-size:12px;pointer-events:none}
 #layers{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .layer.active{outline:2px solid var(--accent);background:#2e3c54}.layer{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-#bottomControls{height:200px}
+#bottomControls{min-height:200px}
+#bottomControls.swapping,#bottomControls.selecting{height:200px}
 #normalControls{display:flex;flex-direction:column;gap:7px}
 #paletteSwapControls{display:none;flex-direction:column;gap:7px;height:100%;justify-content:center}
 #paletteSwapControls h3,#paletteSwapControls p{margin:0}
@@ -69,11 +70,11 @@ header .title{min-width:0;padding-left:6px;text-align:left;font-weight:700;white
 .canvasScaleButton:disabled,.canvasShrinkButton:disabled,.selbar button:disabled,#exportPng:disabled{opacity:.45}
 .paletteEntry{padding:10px 0;border-top:1px solid #343b48}
 .paletteEntryName{font-weight:700;overflow-wrap:anywhere}
-.paletteSamples{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:8px 0}
+.paletteSamples{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;margin:8px 0}
 .paletteSamples span{height:22px;border-radius:5px;border:1px solid #ffffff33}
 .paletteActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .paletteActions button{min-width:0}
-#paletteSwapColors{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+#paletteSwapColors{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
 .paletteSwapSlot{min-width:0;text-shadow:0 1px 2px #000;color:#fff;border:2px solid #ffffff33}
 .paletteSwapSlot.source{outline:2px solid var(--accent);outline-offset:-2px}
 .paletteSwapSlot.target{outline:2px solid var(--danger);outline-offset:-2px}
@@ -232,7 +233,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
   </div>
   <hr>
   <button id="newCanvasBtn" style="width:100%">新規キャンバス</button>
-  <p class="small">自動保存: localStorage。パレットは0番が透明固定、1〜7番が編集可能です。</p>
+  <p class="small">自動保存: localStorage。パレットは0番が透明固定、1〜15番が編集可能です。</p>
   <button class="closeSheet" style="width:100%">閉じる</button>
 </div>
 
@@ -298,7 +299,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
   <p id="paletteLimitInfo" class="small"></p>
   <hr>
   <label for="paletteText" class="small">パレットテキスト</label>
-  <textarea id="paletteText" spellcheck="false" placeholder="Pixlet Palette v2&#10;Name: マイパレット1&#10;Colors: #17191F #F4F4F4 #D95757 #E58A47 #DDBB4C #55A868 #4C78A8"></textarea>
+  <textarea id="paletteText" spellcheck="false" placeholder="Pixlet Palette v2&#10;Name: マイパレット1&#10;Colors: #17191F #F4F4F4 #D95757 #E58A47 #DDBB4C #55A868 #4C78A8 #6C4C9C #30263E #8F3F54 #8C593C #F4C6A6 #36694C #60C1B7 #A8D8F0"></textarea>
   <button id="importPaletteText" style="width:100%;margin-top:8px">テキストを読み込んで登録</button>
   <button class="closeSheet" style="width:100%;margin-top:8px">閉じる</button>
 </div>
@@ -451,7 +452,7 @@ hr{border:0;border-top:1px solid #343b48;margin:14px 0}
     <label>フレーム幅<input id="pngFrameW" type="number" min="1" max="64" value="16"></label>
     <label>高さ<input id="pngFrameH" type="number" min="1" max="64" value="16"></label>
   </div>
-  <p class="small">横一列のスプライトシートとして読み込みます。8色以上は確認後に7色へ自動減色します。半透明は非対応です。</p>
+  <p class="small">横一列のスプライトシートとして読み込みます。不透明色が16色以上の場合は、確認後に15色へ自動減色します。半透明は非対応です。</p>
   <button id="pngImportDo" style="width:100%;margin-top:8px">読み込む</button>
   <button class="closeSheet" style="width:100%;margin-top:8px">閉じる</button>
 </div>
@@ -484,9 +485,24 @@ const PROJECT_TEXT_HEADER = "Pixlet Project v2";
 const GRID_SETTING_KEY = "pixlet-grid-visible";
 const CENTER_LINE_SETTING_KEY = "pixlet-center-line-visible";
 const MY_PALETTES_KEY = "pixlet-my-palettes-v1";
+const PALETTE_SIZE = 16;
+const OPAQUE_COLOR_COUNT = PALETTE_SIZE - 1;
+const LEGACY_OPAQUE_COLOR_COUNT = 7;
+const MY_PALETTE_LIMIT = 7;
+const MY_PALETTE_LIMIT_MESSAGE = `最大${MY_PALETTE_LIMIT}件です。既存パレットを上書きまたは削除してください`;
+const LEGACY_GRAYSCALE_COLORS = [
+  "#000000","#2B2B2B","#555555","#808080","#AAAAAA","#D4D4D4","#FFFFFF",
+  "#111111","#222222","#404040","#6A6A6A","#959595","#BFBFBF","#E5E5E5","#F4F4F4"
+];
 const PALETTE_PRESETS = [
-  {name:"標準カラー",colors:["#17191F","#F4F4F4","#D95757","#E58A47","#DDBB4C","#55A868","#4C78A8"]},
-  {name:"グレースケール",colors:["#000000","#2B2B2B","#555555","#808080","#AAAAAA","#D4D4D4","#FFFFFF"]}
+  {name:"標準カラー",colors:[
+    "#17191F","#F4F4F4","#D95757","#E58A47","#DDBB4C","#55A868","#4C78A8",
+    "#6C4C9C","#30263E","#8F3F54","#8C593C","#F4C6A6","#36694C","#60C1B7","#A8D8F0"
+  ]},
+  {name:"グレースケール",colors:Array.from({length:OPAQUE_COLOR_COUNT},(_,i)=>{
+    const level=Math.round(255*i/(OPAQUE_COLOR_COUNT-1));
+    return rgbToHex(level,level,level).toUpperCase();
+  })}
 ];
 
 const DEFAULT = {
@@ -527,15 +543,17 @@ function normalizeLoaded(obj){
      (obj.version!==undefined && obj.version!==SAVE_DATA_VERSION) ||
      !Number.isInteger(obj.width) || obj.width<1 || obj.width>64 ||
      !Number.isInteger(obj.height) || obj.height<1 || obj.height>64 ||
-     !Array.isArray(obj.palette) || obj.palette.length!==8 || obj.palette[0]!=="transparent" ||
-     !validPaletteColors(obj.palette.slice(1)) ||
+     !Array.isArray(obj.palette) || obj.palette[0]!=="transparent" ||
      !Array.isArray(obj.frames) || obj.frames.length===0){
     throw new Error("invalid project");
   }
+  const originalPaletteSize=obj.palette.length;
+  const colors=normalizePaletteColors(obj.palette.slice(1));
+  if(!colors)throw new Error("invalid palette");
   const pixelCount=obj.width*obj.height;
   if(!obj.frames.every(frame=>frame && Array.isArray(frame.layers) && frame.layers.length===3 &&
      frame.layers.every(layer=>Array.isArray(layer) && layer.length===pixelCount &&
-       layer.every(color=>Number.isInteger(color) && color>=0 && color<8)))){
+       layer.every(color=>Number.isInteger(color) && color>=0 && color<originalPaletteSize)))){
     throw new Error("invalid layers");
   }
   obj.projectName = typeof obj.projectName==="string" ? obj.projectName : "untitled";
@@ -550,7 +568,8 @@ function normalizeLoaded(obj){
   const validIndex=(value,length,fallback)=>Number.isInteger(value) && value>=0 && value<length?value:fallback;
   obj.activeFrame = validIndex(obj.activeFrame,obj.frames.length,0);
   obj.activeLayer = validIndex(obj.activeLayer,3,1);
-  obj.activeColor = validIndex(obj.activeColor,8,1);
+  obj.activeColor = validIndex(obj.activeColor,originalPaletteSize,1);
+  obj.palette = ["transparent",...colors];
   if(!Array.isArray(obj.layerVisible) || obj.layerVisible.length!==3 ||
      !obj.layerVisible.every(value=>typeof value==="boolean")) obj.layerVisible=[true,true,true];
   if(!obj.layerVisible.some(Boolean)) obj.layerVisible=[true,true,true];
@@ -712,15 +731,30 @@ function shrinkArtwork(divisor){
   });
 }
 
-function validPaletteColors(colors){
-  return Array.isArray(colors) && colors.length===7 && colors.every(c=>typeof c==="string" && /^#[0-9a-f]{6}$/i.test(c));
+function normalizePaletteColors(colors){
+  if(!Array.isArray(colors) ||
+     (colors.length!==OPAQUE_COLOR_COUNT && colors.length!==LEGACY_OPAQUE_COLOR_COUNT) ||
+     !colors.every(c=>typeof c==="string" && /^#[0-9a-f]{6}$/i.test(c)))return null;
+  const normalized=colors.map(c=>c.toUpperCase());
+  if(normalized.length===OPAQUE_COLOR_COUNT)return normalized;
+  // Preserve the original color numbers when expanding a saved 7-color palette.
+  const fill=normalized.every((color,i)=>color===LEGACY_GRAYSCALE_COLORS[i])
+    ? LEGACY_GRAYSCALE_COLORS : PALETTE_PRESETS[0].colors;
+  return [...normalized,...fill.slice(normalized.length)];
 }
 function loadMyPalettes(){
   try{
     const saved=JSON.parse(localStorage.getItem(MY_PALETTES_KEY) || "[]");
     if(!Array.isArray(saved))return [];
-    return saved.slice(0,7).filter(p=>p && typeof p.name==="string" && p.name.trim() && validPaletteColors(p.colors))
-      .map(p=>({name:p.name,colors:p.colors.map(c=>c.toUpperCase())}));
+    const palettes=[];
+    for(const p of saved){
+      if(!p || typeof p.name!=="string" || !p.name.trim())continue;
+      const colors=normalizePaletteColors(p.colors);
+      if(!colors)continue;
+      palettes.push({name:p.name,colors});
+      if(palettes.length===MY_PALETTE_LIMIT)break;
+    }
+    return palettes;
   }catch(e){return []}
 }
 function saveMyPalettes(next){
@@ -739,9 +773,8 @@ function parsePaletteText(text){
   if(lines.length!==3 || lines[0]!=="Pixlet Palette v2" ||
      !lines[1].startsWith("Name: ") || !lines[2].startsWith("Colors: "))return null;
   const name=lines[1].slice("Name: ".length).trim();
-  const colors=lines[2].slice("Colors: ".length).trim().split(/[ \t]+/);
-  if(!name || !validPaletteColors(colors))return null;
-  return {name,colors:colors.map(c=>c.toUpperCase())};
+  const colors=normalizePaletteColors(lines[2].slice("Colors: ".length).trim().split(/[ \t]+/));
+  return name && colors ? {name,colors} : null;
 }
 function paletteSamples(colors){
   const row=document.createElement("div");row.className="paletteSamples";
@@ -791,16 +824,16 @@ function openPaletteName(title,value,action){
   $("#paletteNameInput").focus();
 }
 function nextMyPaletteName(){
-  for(let i=1;i<=7;i++){
+  for(let i=1;i<=MY_PALETTE_LIMIT;i++){
     const name=`マイパレット${i}`;
     if(!myPalettes.some(p=>p.name===name))return name;
   }
   return "マイパレット";
 }
 function addMyPalette(){
-  if(myPalettes.length>=7)return toast("最大7件です。既存パレットを上書きまたは削除してください");
+  if(myPalettes.length>=MY_PALETTE_LIMIT)return toast(MY_PALETTE_LIMIT_MESSAGE);
   openPaletteName("現在のパレットを保存",nextMyPaletteName(),name=>{
-    if(myPalettes.length>=7){toast("最大7件です。既存パレットを上書きまたは削除してください");return false;}
+    if(myPalettes.length>=MY_PALETTE_LIMIT){toast(MY_PALETTE_LIMIT_MESSAGE);return false;}
     return saveMyPalettes([...myPalettes,{name,colors:state.palette.slice(1).map(c=>c.toUpperCase())}]);
   });
 }
@@ -824,14 +857,14 @@ async function copyPalette(palette){
   toast(copied?"パレットテキストをコピーしました":"コピーできませんでした");
 }
 function selectPaletteSwapColor(slot){
-  if(!Number.isInteger(slot) || slot<1 || slot>7)return;
+  if(!Number.isInteger(slot) || slot<1 || slot>OPAQUE_COLOR_COUNT)return;
   if(paletteSwapSlots.includes(slot))paletteSwapSlots=paletteSwapSlots.filter(value=>value!==slot);
   else paletteSwapSlots=paletteSwapSlots.length===2?[slot]:[...paletteSwapSlots,slot];
   renderPaletteSwap();
 }
 function renderPaletteSwap(){
   const row=$("#paletteSwapColors");row.innerHTML="";
-  for(let slot=1;slot<=7;slot++){
+  for(let slot=1;slot<=OPAQUE_COLOR_COUNT;slot++){
     const button=document.createElement("button");
     const chosen=paletteSwapSlots.indexOf(slot);
     button.className="paletteSwapSlot"+(chosen===0?" source":chosen===1?" target":"");
@@ -849,7 +882,7 @@ function renderPaletteSwap(){
 }
 function swapArtworkColors(){
   const [a,b]=paletteSwapSlots;
-  if(![a,b].every(slot=>Number.isInteger(slot)&&slot>=1&&slot<=7) || a===b)return;
+  if(![a,b].every(slot=>Number.isInteger(slot)&&slot>=1&&slot<=OPAQUE_COLOR_COUNT) || a===b)return;
   const matches=color=>color===a || color===b;
   if(!state.frames.some(frame=>frame.layers.some(layer=>layer.some(matches))) && !selection?.buffer?.some(matches)){
     return toast("作品内に選択した色がありません");
@@ -892,7 +925,7 @@ function renderPaletteManagement(){
       paletteAction("名前変更",()=>openPaletteName("パレット名を変更",p.name,newName=>{
         const next=myPalettes.slice();next[index]={...p,name:newName};return saveMyPalettes(next);
       })),
-      paletteAction("現在の色で上書き",()=>askPaletteConfirmation("マイパレットを上書き",`「${p.name}」の7色を現在のパレットで上書きしますか？`,"上書きする",()=>{
+      paletteAction("現在の色で上書き",()=>askPaletteConfirmation("マイパレットを上書き",`「${p.name}」の${OPAQUE_COLOR_COUNT}色を現在のパレットで上書きしますか？`,"上書きする",()=>{
         const next=myPalettes.slice();next[index]={...p,colors:state.palette.slice(1).map(c=>c.toUpperCase())};
         if(saveMyPalettes(next)){openPaletteManagement();toast("上書きしました");}
       })),
@@ -903,10 +936,10 @@ function renderPaletteManagement(){
     );
     entry.append(name,paletteSamples(p.colors),actions);mine.appendChild(entry);
   });
-  $("#myPaletteCount").textContent=`${myPalettes.length} / 7`;
-  $("#saveMyPalette").disabled=myPalettes.length>=7;
-  $("#saveMyPalette").title=myPalettes.length>=7?"最大7件です。既存パレットを上書きまたは削除してください":"";
-  $("#paletteLimitInfo").textContent=myPalettes.length>=7?"最大7件です。既存パレットを上書きまたは削除してください。":"";
+  $("#myPaletteCount").textContent=`${myPalettes.length} / ${MY_PALETTE_LIMIT}`;
+  $("#saveMyPalette").disabled=myPalettes.length>=MY_PALETTE_LIMIT;
+  $("#saveMyPalette").title=$("#saveMyPalette").disabled?MY_PALETTE_LIMIT_MESSAGE:"";
+  $("#paletteLimitInfo").textContent=$("#saveMyPalette").disabled?MY_PALETTE_LIMIT_MESSAGE+"。":"";
 }
 function openPaletteManagement(){
   paletteSwapSlots=[];
@@ -1956,7 +1989,7 @@ $("#fitViewBtn").onclick=()=>{
 };
 $("#newCanvasBtn").onclick=()=>{
   $("#wInput").value="16";$("#newCanvasHeight").value="16";
-  $("#newCanvasPalette").replaceChildren(...PALETTE_PRESETS.map((preset,index)=>{
+  $("#newCanvasPalette").replaceChildren(...[...PALETTE_PRESETS,...myPalettes].map((preset,index)=>{
     const option=document.createElement("option");
     option.value=String(index);option.textContent=preset.name;
     return option;
@@ -1988,7 +2021,7 @@ $("#paletteNameCancel").onclick=openPaletteManagement;
 $("#importPaletteText").onclick=()=>{
   const palette=parsePaletteText($("#paletteText").value);
   if(!palette)return toast("パレットテキストの形式またはHEXが不正です");
-  if(myPalettes.length>=7)return toast("最大7件です。既存パレットを上書きまたは削除してください");
+  if(myPalettes.length>=MY_PALETTE_LIMIT)return toast(MY_PALETTE_LIMIT_MESSAGE);
   if(saveMyPalettes([...myPalettes,palette]))toast("マイパレットに登録しました");
 };
 
@@ -2361,7 +2394,7 @@ function updatePngInfo(){
   if(!a)return;
   let message=`画像 ${a.width}×${a.height} / 不透明色 ${a.colors.length}色${a.hasTransparent?" + 透明":""}`;
   if(a.hasSemi)message+=" / 半透明あり（読込不可）";
-  else if(a.colors.length>7)message+=" / 7色への自動減色が必要";
+  else if(a.colors.length>OPAQUE_COLOR_COUNT)message+=` / ${OPAQUE_COLOR_COUNT}色への自動減色が必要`;
   const fw=Number($("#pngFrameW").value),fh=Number($("#pngFrameH").value);
   if(!Number.isInteger(fw)||!Number.isInteger(fh)||fw<1||fh<1||fw>64||fh>64){
     message+=" / フレームサイズは1〜64pxにしてください";
@@ -2388,7 +2421,7 @@ function reducePngColors(image){
   let first=points[0];
   for(const point of points)if(point.count>first.count)first=point;
   let centers=[first.rgb.slice()];
-  while(centers.length<7){
+  while(centers.length<OPAQUE_COLOR_COUNT){
     let candidate=null,best=-1;
     for(const point of points){
       const score=Math.min(...centers.map(center=>pngColorDistance(point.rgb,center)))*point.count;
@@ -2476,8 +2509,8 @@ function importPng(request,reduceColors=false){
     if(a.hasSemi) throw new Error("半透明ピクセルがあります");
     const frameCount=a.width/fw;
     if(frameCount<1)throw new Error("フレーム数が不正です");
-    if(a.colors.length>7 && !reduceColors)throw new Error("自動減色の確認が必要です");
-    const mapped=a.colors.length>7?reducePngColors(a):{
+    if(a.colors.length>OPAQUE_COLOR_COUNT && !reduceColors)throw new Error("自動減色の確認が必要です");
+    const mapped=a.colors.length>OPAQUE_COLOR_COUNT?reducePngColors(a):{
       colors:a.colors.map(k=>{
         const [r,g,b]=k.split(",").map(Number);
         return rgbToHex(r,g,b);
@@ -2485,7 +2518,7 @@ function importPng(request,reduceColors=false){
       colorToIndex:new Map(a.colors.map((key,i)=>[key,i+1]))
     };
     const palette=["transparent",...mapped.colors];
-    while(palette.length<8) palette.push("#000000");
+    while(palette.length<PALETTE_SIZE) palette.push("#000000");
 
     const imgData=a.data;
     const colorToIndex=mapped.colorToIndex;
@@ -2529,9 +2562,9 @@ function importPng(request,reduceColors=false){
 $("#pngImportDo").onclick=()=>{
   try{
     const request=getPngImportRequest();
-    if(request.image.colors.length>7){
+    if(request.image.colors.length>OPAQUE_COLOR_COUNT){
       pendingPngImport=request;
-      $("#pngReduceMessage").textContent=`このPNGは不透明色が${request.image.colors.length}色あります。似た色をまとめて7色に自動減色して読み込みますか？`;
+      $("#pngReduceMessage").textContent=`このPNGは不透明色が${request.image.colors.length}色あります。似た色をまとめて${OPAQUE_COLOR_COUNT}色に自動減色して読み込みますか？`;
       openSheet("#pngReduceSheet");
     }else importPng(request);
   }catch(error){toast(error.message || "PNGを読み込めません");}
@@ -2548,7 +2581,7 @@ $("#resizeBtn").onclick=()=>{
   pushUndo();
   state.width=w;
   state.height=h;
-  const preset=PALETTE_PRESETS[$("#newCanvasPalette").value] || PALETTE_PRESETS[0];
+  const preset=[...PALETTE_PRESETS,...myPalettes][$("#newCanvasPalette").value] || PALETTE_PRESETS[0];
   state.palette=["transparent",...preset.colors];
   state.frames=[makeFrame(w,h)];
   state.activeFrame=0;
