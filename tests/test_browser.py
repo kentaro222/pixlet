@@ -210,7 +210,7 @@ class BrowserTests(unittest.TestCase):
                 self.assertEqual(saved['frames'], data['frames'])
                 self.assertEqual(saved['activeColor'], size - 1)
 
-    def test_studio_imports_one_sheet_as_editable_frames(self):
+    def test_studio_imports_and_swaps_editable_sheet_frames(self):
         self.page.set_viewport_size({'width': 390, 'height': 844})
         self.page.goto(self.url + '/sprite-sheet-studio/')
         png = self.page.evaluate('''() => {
@@ -224,6 +224,8 @@ class BrowserTests(unittest.TestCase):
             return canvas.toDataURL('image/png').split(',')[1];
         }''')
         self.page.locator('#addBlank').click()
+        swap = self.page.locator('#swapFrames')
+        self.assertTrue(swap.is_disabled())
 
         def open_sheet():
             with self.page.expect_file_chooser() as event:
@@ -252,6 +254,20 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.page.locator('#cols').input_value(), '2')
         self.page.locator('#right').click()
         self.assertEqual(self.page.locator('#x').input_value(), '1')
+        frames = self.page.locator('#frames .frame')
+        swap.click()
+        self.assertIn('1番', self.page.locator('#swapStatus').inner_text())
+        swap.click()
+        self.assertEqual(swap.get_attribute('aria-pressed'), 'false')
+        self.assertEqual(frames.first.locator('span').inner_text(), '1. sheet-1')
+
+        swap.click()
+        frames.nth(2).click()
+        self.assertEqual(frames.locator('span').all_text_contents(),
+                         ['1. sheet-3', '2. sheet-2', '3. sheet-1', '4. sheet-4'])
+        self.assertEqual(frames.nth(2).get_attribute('aria-pressed'), 'true')
+        self.assertEqual(swap.get_attribute('aria-pressed'), 'false')
+        self.assertEqual(self.page.locator('#x').input_value(), '1')
 
         with self.page.expect_download() as event:
             self.page.locator('#export').click()
@@ -264,12 +280,12 @@ class BrowserTests(unittest.TestCase):
             canvas.width = img.width; canvas.height = img.height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0);
-            const pixels = [[0,0], [1,0], [4,0], [0,3], [4,3]].map(([x,y]) =>
+            const pixels = [[0,0], [4,0], [0,3], [1,3], [4,3]].map(([x,y]) =>
                 Array.from(ctx.getImageData(x,y,1,1).data));
             return [img.width, img.height, pixels];
         }''', exported)
-        self.assertEqual(result, [7, 5, [[0, 0, 0, 0], [255, 0, 0, 255],
-                                         [0, 255, 0, 255], [0, 0, 255, 255], [0, 0, 0, 0]]])
+        self.assertEqual(result, [7, 5, [[0, 0, 255, 255], [0, 255, 0, 255],
+                                         [0, 0, 0, 0], [255, 0, 0, 255], [0, 0, 0, 0]]])
 
     def test_viewer_filename_length_does_not_change_image_layout(self):
         names = ['a.png', 'long_filename_' * 12 + '.png', '比較用の長いファイル名' * 12 + '.png']
