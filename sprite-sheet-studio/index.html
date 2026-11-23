@@ -14,9 +14,10 @@
 <div class="layout"><div>
 <section class="card editorPanel"><div class="toolbarZoom tools"><button id="zoomOut">−</button><input id="zoomRange" aria-label="表示倍率" type="range" min="25" max="800" value="100" step="25"><button id="zoomIn">＋</button><span id="zoomLabel">100%</span><button id="fit">全体表示</button></div><div id="stage" class="stage"><canvas id="canvas"></canvas></div><div class="row"><span class="muted">タップで選択・ドラッグで位置調整</span><span id="sizeLabel" class="muted grow" style="text-align:right"></span></div><div class="sectionlabel">1pxずつ移動</div><div class="move tools"><button id="left" aria-label="左へ">←</button><button id="up" aria-label="上へ">↑</button><button id="down" aria-label="下へ">↓</button><button id="right" aria-label="右へ">→</button><button id="center">中央</button></div><div class="tools" style="margin-top:9px"><button id="grid" class="active">グリッド ON</button><button id="centerLines">中心線 OFF</button><button id="checker" class="active">透明背景 ON</button><button id="resetView">視点リセット</button></div></section>
 <section class="card framePanel"><h2>フレーム一覧</h2><button id="addImages" class="drop"><strong>＋ 画像を追加</strong><div class="muted">複数選択OK・ここにドロップも可能</div></button><input type="file" accept="image/*" multiple hidden id="files"><button id="loadSheet" class="full">スプライトシートを読み込む</button><input type="file" accept="image/*" hidden id="sheetFile"><div class="row">
-  <button id="swapFrames" aria-pressed="false" disabled>コマを入れ替え</button>
+  <button id="reorderFrames" aria-pressed="false" disabled>コマの並びを変更</button>
+  <button id="moveFrameToEnd" hidden>末尾へ移動</button>
 </div>
-<p id="swapStatus" class="hint" role="status" hidden></p>
+<p id="reorderStatus" class="hint" role="status" hidden></p>
 <div id="frames" class="frames"></div><div id="empty" class="empty">画像はまだありません。上のボタンから追加してください。</div><div class="row secondary"><button id="sortAsc">名前順 ↑</button><button id="sortDesc">名前順 ↓</button><button id="addBlank">＋ 空コマ</button></div><div class="row"><button id="deleteFrame">選択コマ削除</button><button id="clear">すべて削除</button><span id="count" class="muted grow" style="text-align:right"></span></div></section>
 </div><aside class="settings">
 <section class="card"><h2>選択画像の位置調整</h2><div class="fields"><div class="field"><label for="x">X位置 (1px単位)</label><input id="x" type="number" step="1" value="0"></div><div class="field"><label for="y">Y位置 (1px単位)</label><input id="y" type="number" step="1" value="0"></div><div class="field"><label for="rotation">回転 (°)</label><input id="rotation" type="number" value="0"></div></div><div id="selectedInfo" class="hint">画像を選択してください</div></section>
@@ -40,7 +41,7 @@
 <script>
 (()=>{'use strict';const $=id=>document.getElementById(id),stage=$('stage'),cv=$('canvas'),ctx=cv.getContext('2d');
 let frames=[],selected=-1,zoom=1,panX=0,panY=0,grid=true,centerLines=false,checker=true,drag=null;
-let swapSource=null;
+let reorderSource=null;
 const cfg={fw:1,fh:1,cols:4,gap:0,rows:4,auto:true};let frameSizeManual=false;
 const rows=()=>cfg.auto?Math.max(1,Math.ceil(Math.max(1,frames.length)/cfg.cols)):cfg.rows;
 const size=()=>({w:cfg.cols*cfg.fw+(cfg.cols-1)*cfg.gap,h:rows()*cfg.fh+(rows()-1)*cfg.gap});
@@ -51,14 +52,15 @@ function render(){const {w,h}=size(),r=stage.getBoundingClientRect(),vw=r.width|
 ctx.fillStyle='#f5f5f5';ctx.fillRect(0,0,w,h);if(checker){ctx.fillStyle='#d1d5db';for(let y=0;y<h;y+=12)for(let x=0;x<w;x+=12)if((Math.floor(x/12)+Math.floor(y/12))%2===0)ctx.fillRect(x,y,Math.min(12,w-x),Math.min(12,h-y))}ctx.save();ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();frames.forEach((f,i)=>{if(Math.floor(i/cfg.cols)<rows())drawFrame(ctx,f,i)});ctx.restore();if(grid){ctx.strokeStyle='#5389ee';ctx.lineWidth=1/zoom;for(let i=0;i<cfg.cols;i++)for(let j=0;j<rows();j++)ctx.strokeRect(i*(cfg.fw+cfg.gap),j*(cfg.fh+cfg.gap),cfg.fw,cfg.fh)}if(centerLines){ctx.save();ctx.strokeStyle='rgba(255,75,130,.9)';ctx.lineWidth=1/zoom;ctx.setLineDash([4/zoom,3/zoom]);for(let i=0;i<cfg.cols;i++)for(let j=0;j<rows();j++){const x=i*(cfg.fw+cfg.gap),y=j*(cfg.fh+cfg.gap);ctx.beginPath();ctx.moveTo(x+cfg.fw/2,y);ctx.lineTo(x+cfg.fw/2,y+cfg.fh);ctx.moveTo(x,y+cfg.fh/2);ctx.lineTo(x+cfg.fw,y+cfg.fh/2);ctx.stroke()}ctx.restore()}if(selected>=0&&Math.floor(selected/cfg.cols)<rows()){const p=cell(selected);ctx.strokeStyle='#ffbc4e';ctx.lineWidth=2/zoom;ctx.strokeRect(p.x,p.y,cfg.fw,cfg.fh)}ctx.restore();$('sizeLabel').textContent=w+' × '+h+'px';$('sheetInfo').textContent='横 '+cfg.cols+'コマ × 縦 '+rows()+'コマ / '+w+' × '+h+'px';$('zoomLabel').textContent=Math.round(zoom*100)+'%';$('zoomRange').value=Math.max(25,Math.min(800,Math.round(zoom*100/25)*25))}
 function sync(){
   const frame=frames[selected];
-  if(swapSource!==frame||frames.length<2)swapSource=null;
-  const swapping=swapSource!==null;
-  const swapButton=$('swapFrames');
-  swapButton.disabled=!frame||frames.length<2;
-  swapButton.setAttribute('aria-pressed',String(swapping));
-  swapButton.classList.toggle('active',swapping);
-  $('swapStatus').hidden=!swapping;
-  $('swapStatus').textContent=swapping?`${selected+1}番と入れ替えるコマを一覧から選んでください。`:'';
+  if(reorderSource!==frame||frames.length<2)reorderSource=null;
+  const reordering=reorderSource!==null;
+  const reorderButton=$('reorderFrames');
+  reorderButton.disabled=!frame||frames.length<2;
+  reorderButton.setAttribute('aria-pressed',String(reordering));
+  reorderButton.classList.toggle('active',reordering);
+  $('moveFrameToEnd').hidden=!reordering;
+  $('reorderStatus').hidden=!reordering;
+  $('reorderStatus').textContent=reordering?`${selected+1}番を移動します。挿入先のコマを選ぶと、その直前に移動します。`:'';
 
   for(const [id,key] of [['x','x'],['y','y'],['rotation','rotation']]){
     $(id).value=frame?Math.round(frame[key]):0;
@@ -97,18 +99,23 @@ function sync(){
 }
 
 function chooseFrame(index){
-  if(swapSource){
+  if(reorderSource){
     if(index===selected)return;
-    [frames[selected],frames[index]]=[frames[index],frames[selected]];
-    swapSource=null;
+    // Removing the source shifts any later destination one position left.
+    const [frame]=frames.splice(selected,1);
+    if(index>selected)index--;
+    frames.splice(index,0,frame);
+    reorderSource=null;
   }
   selected=index;
   sync();
   $('frames').children[index].focus({preventScroll:true});
 }
 
-$('swapFrames').onclick=()=>{
-  swapSource=swapSource?null:frames[selected];
+$('moveFrameToEnd').onclick=()=>{if(reorderSource)chooseFrame(frames.length)};
+
+$('reorderFrames').onclick=()=>{
+  reorderSource=reorderSource?null:frames[selected];
   sync();
 };
 
